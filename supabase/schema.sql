@@ -1,10 +1,11 @@
 -- ============================================================
--- App_Gestion_Pichangas — Schema (Auth + Dashboard + Jugadores + Draft)
+-- App_Gestion_Pichangas — Schema (Auth + Dashboard + Jugadores + Draft + Partidos)
 -- Incluye ya las tablas del spec completo (Jornadas, Equipos, Draft, Partidos,
 -- Eventos) para que el resto de tabs se puedan construir sin migrar de nuevo.
--- Si tu proyecto Supabase ya corrió una versión anterior de este archivo
--- (sin Draft), NO vuelvas a correr este completo — usa en cambio
--- supabase/migrations/002_draft.sql, que agrega solo lo nuevo.
+-- Si tu proyecto Supabase ya corrió una versión anterior de este archivo,
+-- NO vuelvas a correr este completo — corre en orden solo los archivos
+-- nuevos que te falten dentro de supabase/migrations/ (002_draft.sql,
+-- 003_partidos.sql, etc.)
 -- Ejecutar en el SQL Editor de tu proyecto Supabase.
 -- ============================================================
 
@@ -51,7 +52,9 @@ create table equipos_jornada (
   cuota_equipo numeric(10,2) default 0,
   -- Draft: cupo máximo de jugadores y orden en la ronda de turnos
   cupo_max int,
-  orden_turno int
+  orden_turno int,
+  -- Partidos: posición en la cola de "el que gana se queda" (null = jugando o sin iniciar cola)
+  orden_cola int
 );
 
 alter table jornadas
@@ -79,7 +82,10 @@ create table mini_partidos (
   id_equipo_b uuid references equipos_jornada(id_equipo),
   estado estado_partido not null default 'pendiente',
   marcador_a int not null default 0,
-  marcador_b int not null default 0
+  marcador_b int not null default 0,
+  -- Cronómetro del mini-partido
+  inicio_ts timestamptz,
+  duracion_seg int not null default 600
 );
 
 -- ---------- Eventos de partido (goles, faltas, etc.) ----------

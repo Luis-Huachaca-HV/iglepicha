@@ -4,8 +4,8 @@ Gestión de eventos de fútbol (pichangas): login por nombre + PIN, dashboard
 con cronómetro y contadores en vivo, y checklist de asistencia con filtros
 demográficos y radar de stats por jugador.
 
-**Alcance construido hasta ahora:** Auth + Dashboard + Jugadores + Draft.
-Partidos, Cobranza y Configuraciones quedan como siguiente fase (el schema
+**Alcance construido hasta ahora:** Auth + Dashboard + Jugadores + Draft +
+Partidos. Cobranza y Configuraciones quedan como siguiente fase (el schema
 de Supabase ya incluye las tablas necesarias para no tener que migrar de
 nuevo).
 
@@ -122,13 +122,30 @@ dependa de esto conviene:
    equipo abre un selector para moverlo a otro equipo o devolverlo a la
    bolsa.
 
+## Cómo funciona Partidos
+
+1. En cuanto el Draft termina, la pestaña Partidos arma la **cola** con el
+   mismo orden en que se eligieron los equipos, y crea el primer partido
+   con los dos primeros de la fila.
+2. El admin define la duración (minutos) y toca "Iniciar partido" — arranca
+   el cronómetro y el marcador en 0-0.
+3. Admin o capitán registran goles/faltas con los botones ⚽/🟨, eligiendo
+   al jugador desde la lista de ambos equipos. El marcador se recalcula
+   solo a partir de los eventos — si te equivocaste, el admin puede borrar
+   el evento desde el timeline y el marcador se corrige automáticamente.
+4. Cuando el cronómetro llega a 00:00 suena un silbato local en cada
+   dispositivo (no depende de internet ni de ningún archivo de audio).
+5. El admin toca "Finalizar partido": si hay un ganador claro, el
+   **perdedor va al final de la cola** y el **siguiente equipo en la cola**
+   entra a jugar contra el ganador (que se queda en cancha). Si hay empate,
+   aparece un selector para que el admin decida manualmente quién sigue —
+   no hay desempate automático, tal como pide el spec.
+
 ## Qué sigue
 
-- **Partidos**: cronómetro de mini-partido, marcador en vivo, timeline de
-  eventos editable, cola de "el que gana se queda". Usa los equipos y
-  rosters que deja armados el Draft.
 - **Cobranza**: cálculo de cuota por equipo/jugador, toggle pagado/no
   pagado, bloqueada mientras la jornada está en curso.
 - **Configuraciones**: alta de usuarios y PINs desde la propia app (hoy se
-  hace por SQL Editor), tiempo global/mini-partido configurable, tiempo
-  máximo de cupo por equipo por defecto.
+  hace por SQL Editor), tiempo global/mini-partido configurable por
+  defecto, mercado de pases on/off (hoy el toggle vive en Draft, es el
+  mismo concepto).

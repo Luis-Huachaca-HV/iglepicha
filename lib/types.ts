@@ -36,6 +36,29 @@ export interface EquipoJornada {
   cuota_equipo: number;
   cupo_max: number | null;
   orden_turno: number | null;
+  orden_cola: number | null;
+}
+
+export type EstadoPartido = "pendiente" | "en_curso" | "finalizado";
+
+export interface MiniPartido {
+  id_partido: string;
+  id_jornada: string;
+  id_equipo_a: string | null;
+  id_equipo_b: string | null;
+  estado: EstadoPartido;
+  marcador_a: number;
+  marcador_b: number;
+  inicio_ts: string | null;
+  duracion_seg: number;
+}
+
+export interface EventoPartido {
+  id_evento: string;
+  id_partido: string;
+  accion: "gol" | "falta";
+  id_jugador: string | null;
+  creado_en: string;
 }
 
 export interface AsistenciaDraft {

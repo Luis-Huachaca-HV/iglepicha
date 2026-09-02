@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface CountdownTimerProps {
   inicioTs: string | null;
   totalSeg: number;
   enCurso: boolean;
+  onLlegarACero?: () => void;
 }
 
 function formatear(seg: number) {
@@ -18,8 +19,13 @@ function formatear(seg: number) {
     .padStart(2, "0")}`;
 }
 
-export function CountdownTimer({ inicioTs, totalSeg, enCurso }: CountdownTimerProps) {
+export function CountdownTimer({ inicioTs, totalSeg, enCurso, onLlegarACero }: CountdownTimerProps) {
   const [restante, setRestante] = useState(totalSeg);
+  const yaAvisoRef = useRef(false);
+
+  useEffect(() => {
+    yaAvisoRef.current = false;
+  }, [inicioTs]);
 
   useEffect(() => {
     if (!enCurso || !inicioTs) {
@@ -29,12 +35,17 @@ export function CountdownTimer({ inicioTs, totalSeg, enCurso }: CountdownTimerPr
     function tick() {
       const inicio = new Date(inicioTs as string).getTime();
       const transcurrido = (Date.now() - inicio) / 1000;
-      setRestante(totalSeg - transcurrido);
+      const nuevoRestante = totalSeg - transcurrido;
+      setRestante(nuevoRestante);
+      if (nuevoRestante <= 0 && !yaAvisoRef.current) {
+        yaAvisoRef.current = true;
+        onLlegarACero?.();
+      }
     }
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [inicioTs, totalSeg, enCurso]);
+  }, [inicioTs, totalSeg, enCurso, onLlegarACero]);
 
   const agotandose = enCurso && restante <= 300; // últimos 5 min
 

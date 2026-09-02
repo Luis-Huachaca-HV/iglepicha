@@ -6,7 +6,7 @@ import type { RolSistema } from "@/lib/types";
 
 const TABS = [
   { href: "/dashboard", label: "Dashboard", disponible: true },
-  { href: "/partidos", label: "Partidos", disponible: false },
+  { href: "/partidos", label: "Partidos", disponible: true },
   { href: "/draft", label: "Draft", disponible: true },
   { href: "/jugadores", label: "Jugadores", disponible: true },
   { href: "/cobranza", label: "Cobranza", disponible: false },
