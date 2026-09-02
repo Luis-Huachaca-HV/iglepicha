@@ -1,7 +1,10 @@
 -- ============================================================
--- App_Gestion_Pichangas — Schema inicial (MVP: Auth + Dashboard + Jugadores)
+-- App_Gestion_Pichangas — Schema (Auth + Dashboard + Jugadores + Draft)
 -- Incluye ya las tablas del spec completo (Jornadas, Equipos, Draft, Partidos,
 -- Eventos) para que el resto de tabs se puedan construir sin migrar de nuevo.
+-- Si tu proyecto Supabase ya corrió una versión anterior de este archivo
+-- (sin Draft), NO vuelvas a correr este completo — usa en cambio
+-- supabase/migrations/002_draft.sql, que agrega solo lo nuevo.
 -- Ejecutar en el SQL Editor de tu proyecto Supabase.
 -- ============================================================
 
@@ -24,6 +27,7 @@ create table usuarios (
 
 -- ---------- Jornadas (una "pichanga" / evento) ----------
 create type estado_jornada as enum ('pendiente', 'en_curso', 'finalizada');
+create type estado_draft as enum ('no_iniciado', 'en_curso', 'finalizado');
 
 create table jornadas (
   id_jornada uuid primary key default gen_random_uuid(),
@@ -31,6 +35,10 @@ create table jornadas (
   tiempo_total_seg int not null default 7200, -- 2 horas por defecto
   inicio_ts timestamptz,
   costo_total numeric(10,2) default 0,
+  -- Draft
+  draft_estado estado_draft not null default 'no_iniciado',
+  draft_turno_equipo_id uuid, -- referencia a equipos_jornada, se agrega FK más abajo
+  permitir_cambios_post_draft boolean not null default false,
   creado_en timestamptz not null default now()
 );
 
@@ -40,8 +48,15 @@ create table equipos_jornada (
   id_jornada uuid not null references jornadas(id_jornada) on delete cascade,
   id_capitan uuid references usuarios(id_usuario),
   color_nombre text,
-  cuota_equipo numeric(10,2) default 0
+  cuota_equipo numeric(10,2) default 0,
+  -- Draft: cupo máximo de jugadores y orden en la ronda de turnos
+  cupo_max int,
+  orden_turno int
 );
+
+alter table jornadas
+  add constraint jornadas_draft_turno_equipo_fk
+  foreign key (draft_turno_equipo_id) references equipos_jornada(id_equipo);
 
 -- ---------- Asistencia / Draft ----------
 create table asistencia_draft (

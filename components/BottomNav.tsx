@@ -2,22 +2,33 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { RolSistema } from "@/lib/types";
 
 const TABS = [
   { href: "/dashboard", label: "Dashboard", disponible: true },
   { href: "/partidos", label: "Partidos", disponible: false },
-  { href: "/draft", label: "Draft", disponible: false },
+  { href: "/draft", label: "Draft", disponible: true },
   { href: "/jugadores", label: "Jugadores", disponible: true },
   { href: "/cobranza", label: "Cobranza", disponible: false },
 ];
 
-export function BottomNav() {
+// Tabs visibles por rol, según el spec original.
+const ACCESO_POR_ROL: Record<RolSistema, string[]> = {
+  super_admin: ["/dashboard", "/partidos", "/draft", "/jugadores", "/cobranza"],
+  admin: ["/dashboard", "/partidos", "/draft", "/jugadores", "/cobranza"],
+  capitan: ["/dashboard", "/partidos", "/draft", "/jugadores", "/cobranza"],
+  jugador_registrado: ["/dashboard", "/partidos", "/jugadores"],
+};
+
+export function BottomNav({ rol }: { rol: RolSistema }) {
   const pathname = usePathname();
+  const permitidas = new Set(ACCESO_POR_ROL[rol]);
+  const tabsVisibles = TABS.filter((t) => permitidas.has(t.href));
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-10 border-t border-pitch-800 bg-pitch-900/95 backdrop-blur">
       <ul className="mx-auto flex max-w-md">
-        {TABS.map((tab) => {
+        {tabsVisibles.map((tab) => {
           const activo = pathname === tab.href;
           return (
             <li key={tab.href} className="flex-1">

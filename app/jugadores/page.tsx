@@ -14,7 +14,7 @@ export default function JugadoresPage() {
       <main className="mx-auto max-w-md px-4 pb-24 pt-6">
         <JugadoresClient sesion={sesion} />
       </main>
-      <BottomNav />
+      <BottomNav rol={sesion.rol_sistema} />
     </>
   );
 }

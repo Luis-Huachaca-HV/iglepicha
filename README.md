@@ -4,9 +4,10 @@ Gestión de eventos de fútbol (pichangas): login por nombre + PIN, dashboard
 con cronómetro y contadores en vivo, y checklist de asistencia con filtros
 demográficos y radar de stats por jugador.
 
-**Alcance de este MVP:** Auth + Dashboard + Jugadores. Partidos, Draft,
-Cobranza y Configuraciones quedan como siguiente fase (el schema de Supabase
-ya incluye las tablas necesarias para no tener que migrar de nuevo).
+**Alcance construido hasta ahora:** Auth + Dashboard + Jugadores + Draft.
+Partidos, Cobranza y Configuraciones quedan como siguiente fase (el schema
+de Supabase ya incluye las tablas necesarias para no tener que migrar de
+nuevo).
 
 ## Stack
 
@@ -22,6 +23,11 @@ ya incluye las tablas necesarias para no tener que migrar de nuevo).
 2. Cuando el proyecto esté listo, entra a **SQL Editor** → **New query**,
    pega todo el contenido de `supabase/schema.sql` y ejecútalo (▶ Run).
    Esto crea todas las tablas, tipos y políticas de seguridad (RLS).
+
+   > **¿Ya habías corrido `schema.sql` antes (versión sin Draft)?** No lo
+   > vuelvas a correr — en vez de eso corre solo
+   > `supabase/migrations/002_draft.sql`, que agrega las columnas nuevas
+   > sin tocar lo que ya tenías.
 3. Ve a **Project Settings → API** y copia:
    - `Project URL` → será `NEXT_PUBLIC_SUPABASE_URL`
    - `anon public` key → será `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -98,15 +104,31 @@ dependa de esto conviene:
   Partidos y Cobranza (Cobranza en particular debe quedar bloqueada
   durante el juego, como pide el spec original).
 
-## Qué sigue (fuera de este MVP)
+## Cómo funciona el Draft
+
+1. En Jugadores, el admin elige capitanes → se crean los `equipos_jornada`.
+2. En Draft, con el estado "no iniciado", el admin define el **cupo máximo**
+   de cada equipo y toca "Iniciar draft". Esto fija el orden de turno (por
+   orden de creación de equipo) y asigna a cada capitán a su propio equipo.
+3. En cada turno, **solo el capitán del equipo en turno (o un admin)** puede
+   tocar un jugador de la bolsa. Aparece un pop-up de confirmación; al
+   confirmar, el jugador queda bloqueado a ese equipo y el turno avanza al
+   siguiente equipo con cupo disponible (salta a los que ya se llenaron).
+4. El promedio de rating por equipo se recalcula en vivo (excluye jugadores
+   "S/C" sin votos, para no ensuciar el promedio).
+5. Cuando se llenan todos los cupos o se vacía la bolsa, el draft se marca
+   "finalizado". Ahí el admin puede activar **"Permitir cambios
+   post-draft"**: con eso encendido, tocar el nombre de un jugador en su
+   equipo abre un selector para moverlo a otro equipo o devolverlo a la
+   bolsa.
+
+## Qué sigue
 
 - **Partidos**: cronómetro de mini-partido, marcador en vivo, timeline de
-  eventos editable, cola de "el que gana se queda".
-- **Draft**: selección de jugadores por turnos con confirmación y bloqueo
-  global. El botón "Elegir capitanes" de Jugadores ya deja creados los
-  `equipos_jornada` — el draft en sí asigna jugadores a esos equipos.
+  eventos editable, cola de "el que gana se queda". Usa los equipos y
+  rosters que deja armados el Draft.
 - **Cobranza**: cálculo de cuota por equipo/jugador, toggle pagado/no
   pagado, bloqueada mientras la jornada está en curso.
 - **Configuraciones**: alta de usuarios y PINs desde la propia app (hoy se
-  hace por SQL Editor), tiempo global/mini-partido configurable, mercado
-  de pases on/off.
+  hace por SQL Editor), tiempo global/mini-partido configurable, tiempo
+  máximo de cupo por equipo por defecto.

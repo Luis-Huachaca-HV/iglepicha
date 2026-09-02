@@ -15,6 +15,7 @@ export interface SesionUsuario {
 }
 
 export type EstadoJornada = "pendiente" | "en_curso" | "finalizada";
+export type EstadoDraft = "no_iniciado" | "en_curso" | "finalizado";
 
 export interface Jornada {
   id_jornada: string;
@@ -22,6 +23,19 @@ export interface Jornada {
   tiempo_total_seg: number;
   inicio_ts: string | null;
   costo_total: number;
+  draft_estado: EstadoDraft;
+  draft_turno_equipo_id: string | null;
+  permitir_cambios_post_draft: boolean;
+}
+
+export interface EquipoJornada {
+  id_equipo: string;
+  id_jornada: string;
+  id_capitan: string | null;
+  color_nombre: string | null;
+  cuota_equipo: number;
+  cupo_max: number | null;
+  orden_turno: number | null;
 }
 
 export interface AsistenciaDraft {
