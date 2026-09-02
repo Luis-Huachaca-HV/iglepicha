@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  height: 100%;
+}
+
+/* Marcado tipo línea de cancha: usado para separar secciones sin caer
+   en la típica tarjeta con sombra/borde redondeado uniforme. */
+.linea-cancha {
+  border-top: 2px solid theme('colors.turf.500 / 30%');
+}
+
+/* Scoreboard: números tabulares para que el cronómetro no "salte" de ancho */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: theme('colors.floodlight');
+  color: theme('colors.pitch.950');
+}
