@@ -38,6 +38,11 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
   const [seleccionado, setSeleccionado] = useState<string | null>(null);
   const [modalCapitanes, setModalCapitanes] = useState(false);
   const [capitanesElegidos, setCapitanesElegidos] = useState<string[]>([]);
+  const [modalNuevoJugador, setModalNuevoJugador] = useState(false);
+  const [nuevoNombre, setNuevoNombre] = useState("");
+  const [nuevaEdad, setNuevaEdad] = useState("");
+  const [errorNuevo, setErrorNuevo] = useState<string | null>(null);
+  const [guardandoNuevo, setGuardandoNuevo] = useState(false);
 
   const puedeMarcarAOtros = ["admin", "super_admin", "capitan"].includes(sesion.rol_sistema);
   const esAdmin = sesion.rol_sistema === "admin" || sesion.rol_sistema === "super_admin";
@@ -116,6 +121,32 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
   const presentes = useMemo(() => usuarios.filter((u) => asistencias[u.id_usuario]?.presente), [usuarios, asistencias]);
   const jugadorSeleccionado = usuarios.find((u) => u.id_usuario === seleccionado) ?? null;
 
+  async function crearJugador() {
+    if (!nuevoNombre.trim()) {
+      setErrorNuevo("Ponle un nombre");
+      return;
+    }
+    setGuardandoNuevo(true);
+    setErrorNuevo(null);
+    const res = await fetch("/api/usuarios/crear", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nombre: nuevoNombre, edad: nuevaEdad ? Number(nuevaEdad) : undefined }),
+    });
+    const data = await res.json();
+    setGuardandoNuevo(false);
+    if (!res.ok) {
+      setErrorNuevo(data.error ?? "No se pudo crear");
+      return;
+    }
+    const r = await fetch("/api/usuarios");
+    const d = await r.json();
+    setUsuarios(d.usuarios ?? []);
+    setModalNuevoJugador(false);
+    setNuevoNombre("");
+    setNuevaEdad("");
+  }
+
   async function confirmarCapitanes() {
     if (!jornada || capitanesElegidos.length < 2) return;
     await fetch("/api/equipos", {
@@ -151,12 +182,20 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
       </div>
 
       {esAdmin && (
-        <button
-          onClick={() => setModalCapitanes(true)}
-          className="rounded border border-dashed border-turf-500 py-3 text-sm font-medium text-turf-400"
-        >
-          Elegir capitanes y cantidad de equipos
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setModalNuevoJugador(true)}
+            className="flex-1 rounded border border-dashed border-turf-500 py-3 text-sm font-medium text-turf-400"
+          >
+            + Agregar jugador
+          </button>
+          <button
+            onClick={() => setModalCapitanes(true)}
+            className="flex-1 rounded border border-dashed border-pitch-700 py-3 text-sm font-medium text-mist"
+          >
+            Elegir capitanes
+          </button>
+        </div>
       )}
 
       <ul className="linea-cancha flex flex-col divide-y divide-pitch-800 pt-2">
@@ -200,6 +239,52 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
             </div>
             <button onClick={() => setSeleccionado(null)} className="mt-4 w-full rounded-pill border border-pitch-700 py-2.5 text-sm">
               Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {modalNuevoJugador && (
+        <div className="fixed inset-0 z-20 flex items-end justify-center bg-pitch-950/80 backdrop-blur-sm" onClick={() => setModalNuevoJugador(false)}>
+          <div className="w-full max-w-md rounded-t-2xl border-t border-pitch-700 bg-pitch-900 p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 className="mb-4 font-display text-xl font-bold">Agregar jugador</h2>
+            <div className="flex flex-col gap-3">
+              <label className="flex flex-col gap-1 text-sm">
+                Nombre
+                <input
+                  type="text"
+                  value={nuevoNombre}
+                  onChange={(e) => setNuevoNombre(e.target.value)}
+                  placeholder="Ej. Diego Ramírez"
+                  className="rounded border border-pitch-700 bg-pitch-950 px-3 py-2 text-chalk"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                Edad (opcional)
+                <input
+                  type="number"
+                  min={1}
+                  value={nuevaEdad}
+                  onChange={(e) => setNuevaEdad(e.target.value)}
+                  placeholder="Ej. 27"
+                  className="rounded border border-pitch-700 bg-pitch-950 px-3 py-2 text-chalk"
+                />
+              </label>
+            </div>
+            {errorNuevo && <p className="mt-2 text-sm text-card-red">{errorNuevo}</p>}
+            <p className="mt-3 text-xs text-mist">
+              Entra directo por nombre, sin PIN. Si necesita ser admin, capitán o tener PIN, avísame y lo cambiamos
+              desde Supabase por ahora.
+            </p>
+            <button
+              onClick={crearJugador}
+              disabled={guardandoNuevo}
+              className="mt-4 w-full rounded-pill bg-turf-500 py-3 font-display font-bold text-pitch-950 disabled:opacity-50"
+            >
+              Guardar jugador
+            </button>
+            <button onClick={() => setModalNuevoJugador(false)} className="mt-2 w-full rounded-pill border border-pitch-700 py-2.5 text-sm">
+              Cancelar
             </button>
           </div>
         </div>

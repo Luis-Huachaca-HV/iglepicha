@@ -22,6 +22,7 @@ export function PartidosClient({ sesion }: { sesion: SesionUsuario }) {
   const [asistencias, setAsistencias] = useState<AsistenciaDraft[]>([]);
   const [partido, setPartido] = useState<MiniPartido | null>(null);
   const [errorPartido, setErrorPartido] = useState<string | null>(null);
+  const [esperandoSiguiente, setEsperandoSiguiente] = useState(false);
   const [eventos, setEventos] = useState<EventoPartido[]>([]);
   const [duracionMin, setDuracionMin] = useState(10);
   const [modalEvento, setModalEvento] = useState<"gol" | "falta" | null>(null);
@@ -46,6 +47,7 @@ export function PartidosClient({ sesion }: { sesion: SesionUsuario }) {
     const data = await res.json();
     setPartido(data.partido ?? null);
     setErrorPartido(data.error ?? null);
+    setEsperandoSiguiente(!!data.esperando);
     if (data.partido) setDuracionMin(Math.round(data.partido.duracion_seg / 60));
   }, []);
 
@@ -118,6 +120,15 @@ export function PartidosClient({ sesion }: { sesion: SesionUsuario }) {
     };
   }, [partido?.id_partido]);
 
+  // Red de seguridad: si estamos "esperando" el siguiente partido (recién
+  // finalizó el anterior) reintenta cada 1.5s hasta que aparezca — así la
+  // pantalla nunca se queda pegada esperando un evento realtime que se perdió.
+  useEffect(() => {
+    if (!esperandoSiguiente || !jornada) return;
+    const id = setTimeout(() => cargarPartidoActivo(jornada.id_jornada), 1500);
+    return () => clearTimeout(id);
+  }, [esperandoSiguiente, jornada?.id_jornada, cargarPartidoActivo]);
+
   const usuariosMap = useMemo(() => Object.fromEntries(usuarios.map((u) => [u.id_usuario, u])), [usuarios]);
   const equiposMap = useMemo(() => Object.fromEntries(equipos.map((e) => [e.id_equipo, e])), [equipos]);
 
@@ -170,6 +181,18 @@ export function PartidosClient({ sesion }: { sesion: SesionUsuario }) {
     setEventoEditando(null);
   }
 
+  async function reiniciarPartido() {
+    if (!partido) return;
+    setCargando(true);
+    await fetch("/api/partidos/reiniciar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_partido: partido.id_partido }),
+    });
+    setCargando(false);
+    if (jornada) cargarPartidoActivo(jornada.id_jornada);
+  }
+
   async function finalizarPartido(idEquipoGanador?: string) {
     if (!partido) return;
     if (partido.marcador_a === partido.marcador_b && !idEquipoGanador) {
@@ -190,6 +213,14 @@ export function PartidosClient({ sesion }: { sesion: SesionUsuario }) {
   if (!jornada) return <p className="text-mist">Cargando…</p>;
 
   if (!partido) {
+    if (esperandoSiguiente) {
+      return (
+        <div className="flex flex-col items-center gap-2 py-10 text-center">
+          <span className="h-2 w-2 animate-pulseDot rounded-full bg-floodlight" />
+          <p className="text-sm text-mist">Armando el siguiente partido…</p>
+        </div>
+      );
+    }
     return (
       <div className="rounded border border-dashed border-pitch-700 p-6 text-center">
         <p className="text-chalk">{errorPartido ?? "Todavía no hay partido."}</p>
@@ -215,6 +246,16 @@ export function PartidosClient({ sesion }: { sesion: SesionUsuario }) {
           <span className="max-w-[35%] font-display text-sm font-bold leading-tight">{nombreEquipo(partido.id_equipo_b)}</span>
         </div>
       </div>
+
+      {esAdmin && partido.estado !== "finalizado" && (
+        <button
+          onClick={reiniciarPartido}
+          disabled={cargando}
+          className="w-full rounded border border-dashed border-pitch-700 py-2 text-xs text-mist disabled:opacity-50"
+        >
+          Reiniciar partido (solo pruebas — vuelve a 0-0 y borra la timeline)
+        </button>
+      )}
 
       {partido.estado === "pendiente" && (
         <div className="rounded border border-pitch-800 bg-pitch-900 p-4">

@@ -9,13 +9,14 @@ const TABS = [
   { href: "/partidos", label: "Partidos", disponible: true },
   { href: "/draft", label: "Draft", disponible: true },
   { href: "/jugadores", label: "Jugadores", disponible: true },
-  { href: "/cobranza", label: "Cobranza", disponible: false },
+  { href: "/cobranza", label: "Cobranza", disponible: true },
+  { href: "/configuraciones", label: "Config", disponible: true },
 ];
 
 // Tabs visibles por rol, según el spec original.
 const ACCESO_POR_ROL: Record<RolSistema, string[]> = {
-  super_admin: ["/dashboard", "/partidos", "/draft", "/jugadores", "/cobranza"],
-  admin: ["/dashboard", "/partidos", "/draft", "/jugadores", "/cobranza"],
+  super_admin: ["/dashboard", "/partidos", "/draft", "/jugadores", "/cobranza", "/configuraciones"],
+  admin: ["/dashboard", "/partidos", "/draft", "/jugadores", "/cobranza", "/configuraciones"],
   capitan: ["/dashboard", "/partidos", "/draft", "/jugadores", "/cobranza"],
   jugador_registrado: ["/dashboard", "/partidos", "/jugadores"],
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface PinPadProps {
   titulo: string;
@@ -16,6 +16,18 @@ export function PinPad({ titulo, subtitulo, confirmar, onSubmit, error, cargando
   const [pin, setPin] = useState("");
   const [confirmarPin, setConfirmarPin] = useState("");
   const [fase, setFase] = useState<"pin" | "confirmar">("pin");
+
+  // Si el intento anterior falló (PIN incorrecto, PIN no coincide, etc.),
+  // limpia los puntos para que se pueda volver a escribir. Antes de este
+  // fix los 4 puntos se quedaban "llenos" y no dejaba tocar más números —
+  // quedabas trabado sin poder reintentar.
+  useEffect(() => {
+    if (error) {
+      setPin("");
+      setConfirmarPin("");
+      setFase("pin");
+    }
+  }, [error]);
 
   const activo = fase === "pin" ? pin : confirmarPin;
   const setActivo = fase === "pin" ? setPin : setConfirmarPin;

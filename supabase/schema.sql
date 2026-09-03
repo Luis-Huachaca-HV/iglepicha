@@ -1,5 +1,5 @@
 -- ============================================================
--- App_Gestion_Pichangas — Schema (Auth + Dashboard + Jugadores + Draft + Partidos)
+-- App_Gestion_Pichangas — Schema (Auth + Dashboard + Jugadores + Draft + Partidos + Cobranza + Configuraciones)
 -- Incluye ya las tablas del spec completo (Jornadas, Equipos, Draft, Partidos,
 -- Eventos) para que el resto de tabs se puedan construir sin migrar de nuevo.
 -- Si tu proyecto Supabase ya corrió una versión anterior de este archivo,
@@ -40,6 +40,8 @@ create table jornadas (
   draft_estado estado_draft not null default 'no_iniciado',
   draft_turno_equipo_id uuid, -- referencia a equipos_jornada, se agrega FK más abajo
   permitir_cambios_post_draft boolean not null default false,
+  -- Configuraciones: duración por defecto de cada mini-partido (Partidos)
+  duracion_mini_partido_seg int not null default 600,
   creado_en timestamptz not null default now()
 );
 

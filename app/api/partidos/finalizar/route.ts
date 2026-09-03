@@ -57,9 +57,20 @@ export async function POST(req: NextRequest) {
   let siguientePartido = null;
   if (enEspera) {
     await admin.from("equipos_jornada").update({ orden_cola: null }).eq("id_equipo", enEspera.id_equipo);
+    const { data: jornadaActual } = await admin
+      .from("jornadas")
+      .select("duracion_mini_partido_seg")
+      .eq("id_jornada", partido.id_jornada)
+      .single();
     const { data: nuevo } = await admin
       .from("mini_partidos")
-      .insert({ id_jornada: partido.id_jornada, id_equipo_a: ganador, id_equipo_b: enEspera.id_equipo, estado: "pendiente" })
+      .insert({
+        id_jornada: partido.id_jornada,
+        id_equipo_a: ganador,
+        id_equipo_b: enEspera.id_equipo,
+        estado: "pendiente",
+        duracion_seg: jornadaActual?.duracion_mini_partido_seg ?? 600,
+      })
       .select("*")
       .single();
     siguientePartido = nuevo;

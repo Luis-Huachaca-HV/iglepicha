@@ -4,10 +4,8 @@ Gestión de eventos de fútbol (pichangas): login por nombre + PIN, dashboard
 con cronómetro y contadores en vivo, y checklist de asistencia con filtros
 demográficos y radar de stats por jugador.
 
-**Alcance construido hasta ahora:** Auth + Dashboard + Jugadores + Draft +
-Partidos. Cobranza y Configuraciones quedan como siguiente fase (el schema
-de Supabase ya incluye las tablas necesarias para no tener que migrar de
-nuevo).
+**Alcance construido:** las 6 pestañas del spec original — Auth + Dashboard
++ Jugadores + Draft + Partidos + Cobranza + Configuraciones.
 
 ## Stack
 
@@ -141,11 +139,51 @@ dependa de esto conviene:
    aparece un selector para que el admin decida manualmente quién sigue —
    no hay desempate automático, tal como pide el spec.
 
-## Qué sigue
+## Agregar y administrar usuarios desde la app
 
-- **Cobranza**: cálculo de cuota por equipo/jugador, toggle pagado/no
-  pagado, bloqueada mientras la jornada está en curso.
-- **Configuraciones**: alta de usuarios y PINs desde la propia app (hoy se
-  hace por SQL Editor), tiempo global/mini-partido configurable por
-  defecto, mercado de pases on/off (hoy el toggle vive en Draft, es el
-  mismo concepto).
+Ya no hace falta tocar Supabase para esto — todo vive en **Configuraciones**
+(solo visible para admin y super_admin):
+
+- **Agregar usuario**: nombre, edad opcional y rol. Un admin normal solo
+  puede crear jugadores y capitanes; solo un **super_admin** puede crear
+  otros admin o super_admin.
+- **Cambiar el rol** de cualquier usuario ya existente, con la misma
+  restricción de arriba.
+- **Resetear PIN**: el botón que resuelve el "olvidé mi PIN" sin entrar a
+  Supabase — borra el PIN guardado y la próxima vez que esa persona toque
+  su nombre en el login, la app le pide crear uno nuevo.
+- (En Jugadores sigue existiendo el botón rápido "+ Agregar jugador" para
+  altas veloces en cancha — crea siempre con rol jugador, sin PIN.)
+
+## Otras configuraciones
+
+- **Tiempo global de la jornada**: el cronómetro del Dashboard. Solo se
+  puede cambiar mientras la jornada está "pendiente" (antes de tocar
+  "Iniciar jornada"), para no desincronizar un cronómetro que ya corre.
+- **Duración por defecto del mini-partido**: se aplica a cada partido nuevo
+  que arma la cola en Partidos. Se puede seguir ajustando manualmente por
+  partido individual al iniciarlo, como ya hacía antes.
+- **Mercado de pases**: el mismo toggle "permitir cambios post-draft" que
+  ya vive en Draft, disponible acá también por conveniencia.
+
+## Con esto están las 6 pestañas del spec original
+
+Auth → Dashboard → Jugadores → Draft → Partidos → Cobranza → Configuraciones.
+De acá en adelante son mejoras sobre lo ya construido (pulir UI, agregar
+validaciones, indicadores adicionales) más que tabs nuevas — avísame qué
+quieres ajustar después de probarlo en cancha.
+
+## Correcciones de bugs
+
+- **Partidos en bucle**: al finalizar un partido, a veces se creaba el
+  siguiente usando el orden original del Draft en vez de la cola real,
+  repitiendo el mismo cruce. Ahora el siguiente partido SIEMPRE lo arma
+  `/api/partidos/finalizar` con la cola correcta; si la pantalla lo está
+  esperando, reintenta sola cada 1.5s en vez de mostrar una pantalla muerta.
+- **PIN trabado al reintentar**: si ingresabas mal el PIN, los 4 puntos se
+  quedaban llenos y no dejaba tocar más números. Ahora se limpia solo en
+  cuanto aparece un error, para poder reintentar de inmediato.
+- **Nuevo: "Reiniciar partido" (solo pruebas)**: botón para admin en
+  Partidos que vuelve el partido actual a 0-0 y borra su timeline, sin
+  tocar la cola ni el draft — útil para salir de un partido a medio probar
+  sin tener que completarlo.
