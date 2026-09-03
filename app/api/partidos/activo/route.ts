@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
+// Nunca cachear: esta ruta siempre debe leer/escribir el estado más
+// reciente de Supabase, no una versión congelada del último deploy.
+export const dynamic = "force-dynamic";
+
 // GET /api/partidos/activo?id_jornada=...
 // Devuelve el partido pendiente o en curso más reciente de la jornada.
 // Si no existe ninguno todavía, inicializa la cola (orden_cola = orden_turno

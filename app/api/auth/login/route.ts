@@ -4,6 +4,10 @@ import { hashPin, verifyPin } from "@/lib/pin";
 import { crearCookieSesion, NOMBRE_COOKIE_SESION } from "@/lib/session";
 import { requierePin } from "@/lib/types";
 
+// Nunca cachear: esta ruta siempre debe leer/escribir el estado más
+// reciente de Supabase, no una versión congelada del último deploy.
+export const dynamic = "force-dynamic";
+
 // POST /api/auth/login
 // body: { id_usuario: string, pin?: string, confirmar_pin?: string }
 //

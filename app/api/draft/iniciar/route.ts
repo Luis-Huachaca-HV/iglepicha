@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { obtenerSesionActual } from "@/lib/session";
 
+// Nunca cachear: esta ruta siempre debe leer/escribir el estado más
+// reciente de Supabase, no una versión congelada del último deploy.
+export const dynamic = "force-dynamic";
+
 // POST /api/draft/iniciar
 // body: { id_jornada: string, cupos: Record<id_equipo, number> }
 // Fija el cupo máximo y el orden de turno de cada equipo, asigna a cada

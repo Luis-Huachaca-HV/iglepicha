@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { obtenerSesionActual } from "@/lib/session";
 
+// Nunca cachear: esta ruta siempre debe leer/escribir el estado más
+// reciente de Supabase, no una versión congelada del último deploy.
+export const dynamic = "force-dynamic";
+
 // POST /api/jornada/tiempo
 // body: { id_jornada: string, tiempo_total_seg?: number, duracion_mini_partido_seg?: number }
 // tiempo_total_seg (el cronómetro del Dashboard) solo se puede cambiar

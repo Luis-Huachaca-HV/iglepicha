@@ -3,6 +3,10 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { obtenerSesionActual } from "@/lib/session";
 import { recalcularMarcador } from "@/lib/marcador";
 
+// Nunca cachear: esta ruta siempre debe leer/escribir el estado más
+// reciente de Supabase, no una versión congelada del último deploy.
+export const dynamic = "force-dynamic";
+
 // PATCH /api/partidos/evento/[id_evento]  body: { accion?, id_jugador? }
 // DELETE /api/partidos/evento/[id_evento]
 // Solo admin/super_admin pueden editar o borrar eventos ya cargados

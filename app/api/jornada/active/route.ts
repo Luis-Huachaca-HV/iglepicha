@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
+// Nunca cachear: esta ruta siempre debe leer/escribir el estado más
+// reciente de Supabase, no una versión congelada del último deploy.
+export const dynamic = "force-dynamic";
+
 // GET /api/jornada/active
 // Devuelve la jornada más reciente que no esté finalizada. Si no existe
 // ninguna, crea una nueva en estado "pendiente" para que Dashboard y

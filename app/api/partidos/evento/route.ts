@@ -3,6 +3,10 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { obtenerSesionActual } from "@/lib/session";
 import { recalcularMarcador } from "@/lib/marcador";
 
+// Nunca cachear: esta ruta siempre debe leer/escribir el estado más
+// reciente de Supabase, no una versión congelada del último deploy.
+export const dynamic = "force-dynamic";
+
 // POST /api/partidos/evento
 // body: { id_partido: string, accion: "gol" | "falta", id_jugador: string }
 export async function POST(req: NextRequest) {

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
+// Nunca cachear: esta ruta siempre debe leer/escribir el estado más
+// reciente de Supabase, no una versión congelada del último deploy.
+export const dynamic = "force-dynamic";
+
 // GET /api/usuarios
 // Lista pública para la pantalla de login: nunca devuelve pin_hash,
 // solo si el usuario "tiene_pin" configurado (para saber si mostrar

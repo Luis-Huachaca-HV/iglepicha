@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { obtenerSesionActual } from "@/lib/session";
 
+// Nunca cachear: esta ruta siempre debe leer/escribir el estado más
+// reciente de Supabase, no una versión congelada del último deploy.
+export const dynamic = "force-dynamic";
+
 // POST /api/asistencia/asignar-equipo
 // body: { id_jornada: string, id_usuario: string, id_equipo: string | null }
 // Asigna (o quita, con id_equipo null) a un jugador de un equipo en

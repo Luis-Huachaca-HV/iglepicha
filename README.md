@@ -228,3 +228,19 @@ desde abajo respetan ese margen para que ningún botón quede tapado o
 pegado al borde. También se agrandaron los botones más pequeños (el
 check de asistencia, el toggle de pagado, los inputs numéricos) a un
 tamaño cómodo para tocar con el dedo.
+
+## Corrección importante: rutas de la API se estaban "congelando" en el build
+
+Esto era la causa real de que resetear tu PIN a NULL no se reflejara, y
+podía afectar más cosas de forma silenciosa. Next.js, por defecto, puede
+detectar que una ruta de API "no depende de nada dinámico" y la convierte
+en estática: la ejecuta UNA vez durante el build en Vercel y sirve esa
+misma respuesta congelada a todo el mundo después, sin volver a consultar
+Supabase — no es un problema de conexión, es una optimización de Next.js
+que en este caso jugaba en contra.
+
+Ahora **todas** las rutas de `/api/*` tienen `export const dynamic =
+"force-dynamic"`, que le dice a Next.js "esta ruta siempre se ejecuta
+fresca, nunca la guardes". Lo puedes confirmar vos mismo: en la salida de
+`npm run build`, cada ruta bajo `/api/` debe aparecer marcada con `ƒ`
+(Dynamic) — si alguna vez ves una marcada `○` (Static), avísame.

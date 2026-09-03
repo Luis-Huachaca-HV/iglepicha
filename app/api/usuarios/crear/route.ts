@@ -3,6 +3,10 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { obtenerSesionActual } from "@/lib/session";
 import type { RolSistema } from "@/lib/types";
 
+// Nunca cachear: esta ruta siempre debe leer/escribir el estado más
+// reciente de Supabase, no una versión congelada del último deploy.
+export const dynamic = "force-dynamic";
+
 const ROLES_VALIDOS: RolSistema[] = ["super_admin", "admin", "capitan", "jugador_registrado"];
 
 // POST /api/usuarios/crear
