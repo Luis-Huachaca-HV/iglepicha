@@ -20,7 +20,10 @@ export function TopBar({ sesion, estadoLabel }: { sesion: SesionUsuario; estadoL
   }
 
   return (
-    <header className="linea-cancha flex items-center justify-between border-b border-pitch-800 bg-pitch-900/80 px-4 py-3 backdrop-blur">
+    <header
+      className="linea-cancha sticky top-0 z-10 flex items-center justify-between border-b border-pitch-800 bg-pitch-900/90 px-4 pb-3 backdrop-blur"
+      style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
+    >
       <div className="flex items-center gap-2">
         {estadoLabel && (
           <span className="flex items-center gap-1.5 rounded-pill bg-pitch-800 px-2.5 py-1 text-xs font-medium text-floodlight">

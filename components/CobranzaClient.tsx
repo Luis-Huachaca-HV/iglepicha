@@ -2,14 +2,8 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import type { AsistenciaDraft, EquipoJornada, Jornada, RolSistema, SesionUsuario } from "@/lib/types";
-
-interface UsuarioLista {
-  id_usuario: string;
-  nombre: string;
-  edad: number | null;
-  rol_sistema: RolSistema;
-}
+import { useUsuarios } from "@/lib/useUsuarios";
+import type { AsistenciaDraft, EquipoJornada, Jornada, SesionUsuario } from "@/lib/types";
 
 function soles(valor: number) {
   return `S/ ${valor.toFixed(2)}`;
@@ -19,7 +13,7 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
   const [jornada, setJornada] = useState<Jornada | null>(null);
   const [equipos, setEquipos] = useState<EquipoJornada[]>([]);
   const [asistencias, setAsistencias] = useState<AsistenciaDraft[]>([]);
-  const [usuarios, setUsuarios] = useState<UsuarioLista[]>([]);
+  const { usuarios } = useUsuarios();
   const [costoInput, setCostoInput] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,9 +40,6 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
           cargarEquiposYAsistencias(d.jornada.id_jornada);
         }
       });
-    fetch("/api/usuarios")
-      .then((r) => r.json())
-      .then((d) => setUsuarios(d.usuarios ?? []));
   }, [cargarEquiposYAsistencias]);
 
   useEffect(() => {
@@ -150,7 +141,7 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
               value={costoInput}
               onChange={(e) => setCostoInput(e.target.value)}
               disabled={bloqueado}
-              className="w-24 rounded border border-pitch-700 bg-pitch-950 px-2 py-1 text-center disabled:opacity-40"
+              className="w-24 rounded border border-pitch-700 bg-pitch-950 px-2 py-2 text-center disabled:opacity-40"
             />
           </label>
           {error && <p className="mt-2 text-sm text-card-red">{error}</p>}
@@ -187,7 +178,7 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
                     <button
                       disabled={bloqueado || (!puedeMarcarAOtros && sesion.id_usuario !== a.id_usuario)}
                       onClick={() => marcarPago(a.id_usuario, !a.pago_realizado)}
-                      className={`rounded-pill px-3 py-1 text-xs font-bold transition disabled:opacity-30 ${
+                      className={`rounded-pill px-3 py-2.5 text-xs font-bold transition disabled:opacity-30 ${
                         a.pago_realizado ? "bg-turf-500 text-pitch-950" : "border border-pitch-700 text-mist"
                       }`}
                     >

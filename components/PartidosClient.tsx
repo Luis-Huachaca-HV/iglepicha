@@ -4,21 +4,15 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { reproducirSilbato } from "@/lib/silbato";
-import type { AsistenciaDraft, EquipoJornada, EventoPartido, Jornada, MiniPartido, RolSistema, SesionUsuario } from "@/lib/types";
-
-interface UsuarioLista {
-  id_usuario: string;
-  nombre: string;
-  edad: number | null;
-  rol_sistema: RolSistema;
-}
+import { useUsuarios } from "@/lib/useUsuarios";
+import type { AsistenciaDraft, EquipoJornada, EventoPartido, Jornada, MiniPartido, SesionUsuario } from "@/lib/types";
 
 const ICONO: Record<string, string> = { gol: "⚽", falta: "🟨" };
 
 export function PartidosClient({ sesion }: { sesion: SesionUsuario }) {
   const [jornada, setJornada] = useState<Jornada | null>(null);
   const [equipos, setEquipos] = useState<EquipoJornada[]>([]);
-  const [usuarios, setUsuarios] = useState<UsuarioLista[]>([]);
+  const { usuarios } = useUsuarios();
   const [asistencias, setAsistencias] = useState<AsistenciaDraft[]>([]);
   const [partido, setPartido] = useState<MiniPartido | null>(null);
   const [errorPartido, setErrorPartido] = useState<string | null>(null);
@@ -61,9 +55,6 @@ export function PartidosClient({ sesion }: { sesion: SesionUsuario }) {
           cargarPartidoActivo(d.jornada.id_jornada);
         }
       });
-    fetch("/api/usuarios")
-      .then((r) => r.json())
-      .then((d) => setUsuarios(d.usuarios ?? []));
   }, [cargarEquiposYAsistencias, cargarPartidoActivo]);
 
   // Realtime: cualquier cambio en partidos/equipos de esta jornada refresca todo
@@ -269,7 +260,7 @@ export function PartidosClient({ sesion }: { sesion: SesionUsuario }) {
                   min={1}
                   value={duracionMin}
                   onChange={(e) => setDuracionMin(Number(e.target.value))}
-                  className="w-20 rounded border border-pitch-700 bg-pitch-950 px-2 py-1 text-center"
+                  className="w-20 rounded border border-pitch-700 bg-pitch-950 px-2 py-2 text-center"
                 />
               </label>
               <button
@@ -367,7 +358,7 @@ export function PartidosClient({ sesion }: { sesion: SesionUsuario }) {
       {/* Modal: agregar evento */}
       {modalEvento && (
         <div className="fixed inset-0 z-20 flex items-end justify-center bg-pitch-950/80 backdrop-blur-sm" onClick={() => setModalEvento(null)}>
-          <div className="w-full max-w-md rounded-t-2xl border-t border-pitch-700 bg-pitch-900 p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-md rounded-t-2xl border-t border-pitch-700 bg-pitch-900 p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-4 font-display text-xl font-bold">
               {ICONO[modalEvento]} ¿Quién {modalEvento === "gol" ? "anotó" : "cometió la falta"}?
             </h2>

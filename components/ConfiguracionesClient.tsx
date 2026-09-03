@@ -1,15 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
+import { Toast } from "@/components/Toast";
+import { useUsuarios } from "@/lib/useUsuarios";
+import { useToast } from "@/lib/useToast";
 import type { Jornada, RolSistema, SesionUsuario } from "@/lib/types";
-
-interface UsuarioLista {
-  id_usuario: string;
-  nombre: string;
-  edad: number | null;
-  rol_sistema: RolSistema;
-  tiene_pin: boolean;
-}
 
 const ETIQUETA_ROL: Record<RolSistema, string> = {
   super_admin: "Super admin",
@@ -22,7 +17,7 @@ const ROLES: RolSistema[] = ["jugador_registrado", "capitan", "admin", "super_ad
 
 export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
   const [jornada, setJornada] = useState<Jornada | null>(null);
-  const [usuarios, setUsuarios] = useState<UsuarioLista[]>([]);
+  const { usuarios, recargarUsuarios } = useUsuarios();
   const [tiempoTotalMin, setTiempoTotalMin] = useState("120");
   const [miniPartidoMin, setMiniPartidoMin] = useState("10");
   const [mensajeTiempo, setMensajeTiempo] = useState<string | null>(null);
@@ -31,14 +26,9 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
   const [edadNueva, setEdadNueva] = useState("");
   const [rolNuevo, setRolNuevo] = useState<RolSistema>("jugador_registrado");
   const [mensajeUsuario, setMensajeUsuario] = useState<string | null>(null);
+  const { mensaje: mensajeToast, mostrarToast } = useToast();
 
   const esSuperAdmin = sesion.rol_sistema === "super_admin";
-
-  const cargarUsuarios = useCallback(() => {
-    fetch("/api/usuarios")
-      .then((r) => r.json())
-      .then((d) => setUsuarios(d.usuarios ?? []));
-  }, []);
 
   useEffect(() => {
     fetch("/api/jornada/active")
@@ -50,8 +40,7 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
           setMiniPartidoMin(String(Math.round(d.jornada.duracion_mini_partido_seg / 60)));
         }
       });
-    cargarUsuarios();
-  }, [cargarUsuarios]);
+  }, []);
 
   async function guardarTiempos() {
     if (!jornada) return;
@@ -104,7 +93,8 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
     setNombreNuevo("");
     setEdadNueva("");
     setRolNuevo("jugador_registrado");
-    cargarUsuarios();
+    recargarUsuarios();
+    mostrarToast(`✓ ${data.usuario?.nombre ?? "Usuario"} agregado`);
   }
 
   async function cambiarRol(idUsuario: string, rol: RolSistema) {
@@ -113,7 +103,7 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id_usuario: idUsuario, rol_sistema: rol }),
     });
-    cargarUsuarios();
+    recargarUsuarios();
   }
 
   async function resetearPin(idUsuario: string) {
@@ -122,11 +112,14 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id_usuario: idUsuario }),
     });
-    cargarUsuarios();
+    recargarUsuarios();
+    mostrarToast("✓ PIN reseteado");
   }
 
   return (
     <div className="flex flex-col gap-8">
+      <Toast mensaje={mensajeToast} />
+
       <div>
         <h1 className="font-display text-2xl font-bold">Configuraciones</h1>
         <p className="text-sm text-mist">Tiempos, usuarios y mercado de pases.</p>
@@ -144,7 +137,7 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
               value={tiempoTotalMin}
               onChange={(e) => setTiempoTotalMin(e.target.value)}
               disabled={jornada?.estado !== "pendiente"}
-              className="w-20 rounded border border-pitch-700 bg-pitch-950 px-2 py-1 text-center disabled:opacity-40"
+              className="w-20 rounded border border-pitch-700 bg-pitch-950 px-2 py-2 text-center disabled:opacity-40"
             />
           </label>
           {jornada?.estado !== "pendiente" && (
@@ -157,11 +150,11 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
               min={1}
               value={miniPartidoMin}
               onChange={(e) => setMiniPartidoMin(e.target.value)}
-              className="w-20 rounded border border-pitch-700 bg-pitch-950 px-2 py-1 text-center"
+              className="w-20 rounded border border-pitch-700 bg-pitch-950 px-2 py-2 text-center"
             />
           </label>
           {mensajeTiempo && <p className="text-xs text-turf-400">{mensajeTiempo}</p>}
-          <button onClick={guardarTiempos} className="rounded-pill bg-turf-500 py-2.5 text-sm font-bold text-pitch-950">
+          <button onClick={guardarTiempos} className="rounded-pill bg-turf-500 py-3 text-sm font-bold text-pitch-950">
             Guardar tiempos
           </button>
         </div>
@@ -192,7 +185,7 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
             placeholder="Nombre"
             value={nombreNuevo}
             onChange={(e) => setNombreNuevo(e.target.value)}
-            className="rounded border border-pitch-700 bg-pitch-950 px-3 py-2 text-sm"
+            className="rounded border border-pitch-700 bg-pitch-950 px-3 py-2.5 text-base"
           />
           <input
             type="number"
@@ -200,12 +193,12 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
             min={1}
             value={edadNueva}
             onChange={(e) => setEdadNueva(e.target.value)}
-            className="rounded border border-pitch-700 bg-pitch-950 px-3 py-2 text-sm"
+            className="rounded border border-pitch-700 bg-pitch-950 px-3 py-2.5 text-base"
           />
           <select
             value={rolNuevo}
             onChange={(e) => setRolNuevo(e.target.value as RolSistema)}
-            className="rounded border border-pitch-700 bg-pitch-950 px-3 py-2 text-sm"
+            className="rounded border border-pitch-700 bg-pitch-950 px-3 py-2.5 text-base"
           >
             {ROLES.filter((r) => esSuperAdmin || (r !== "admin" && r !== "super_admin")).map((r) => (
               <option key={r} value={r}>
@@ -214,7 +207,7 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
             ))}
           </select>
           {mensajeUsuario && <p className="text-sm text-card-red">{mensajeUsuario}</p>}
-          <button onClick={crearUsuario} className="rounded-pill bg-turf-500 py-2.5 text-sm font-bold text-pitch-950">
+          <button onClick={crearUsuario} className="rounded-pill bg-turf-500 py-3 text-sm font-bold text-pitch-950">
             Crear usuario
           </button>
           {!esSuperAdmin && (
@@ -238,7 +231,7 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
                   value={u.rol_sistema}
                   disabled={!esSuperAdmin && (u.rol_sistema === "admin" || u.rol_sistema === "super_admin")}
                   onChange={(e) => cambiarRol(u.id_usuario, e.target.value as RolSistema)}
-                  className="flex-1 rounded border border-pitch-700 bg-pitch-950 px-2 py-1 text-xs disabled:opacity-40"
+                  className="flex-1 rounded border border-pitch-700 bg-pitch-950 px-2 py-2.5 text-xs disabled:opacity-40"
                 >
                   {ROLES.filter((r) => esSuperAdmin || (r !== "admin" && r !== "super_admin")).map((r) => (
                     <option key={r} value={r}>
@@ -249,7 +242,7 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
                 {u.tiene_pin && (
                   <button
                     onClick={() => resetearPin(u.id_usuario)}
-                    className="rounded-pill border border-card-red px-3 py-1 text-xs font-medium text-card-red"
+                    className="rounded-pill border border-card-red px-3 py-2.5 text-xs font-medium text-card-red"
                   >
                     Resetear PIN
                   </button>

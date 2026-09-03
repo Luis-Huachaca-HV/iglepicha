@@ -187,3 +187,44 @@ quieres ajustar después de probarlo en cancha.
   Partidos que vuelve el partido actual a 0-0 y borra su timeline, sin
   tocar la cola ni el draft — útil para salir de un partido a medio probar
   sin tener que completarlo.
+## Corrección importante: Realtime no estaba habilitado en la base de datos
+
+Esta era la causa raíz de que los jugadores nuevos (y en general cualquier
+cambio en vivo) no aparecieran sin recargar. El código siempre estuvo bien
+suscrito, pero Supabase no envía ningún aviso a menos que la tabla esté
+agregada a la publicación `supabase_realtime` — es un interruptor a nivel
+de base de datos, no de código, que hasta ahora nadie había activado.
+
+`supabase/migrations/006_realtime.sql` lo activa para las 6 tablas que la
+app necesita escuchar en vivo (`usuarios`, `jornadas`, `equipos_jornada`,
+`asistencia_draft`, `mini_partidos`, `eventos_partido`). Además, se creó
+un hook compartido (`lib/useUsuarios.ts`) que todas las pantallas usan
+para la lista de usuarios, así que un jugador nuevo aparece al instante en
+Jugadores, Draft, Partidos, Cobranza, Configuraciones y en el login mismo,
+sin que nadie tenga que refrescar.
+
+## Mensajes de confirmación
+
+Al agregar un jugador (desde Jugadores o Configuraciones) o resetear un
+PIN, aparece un mensaje breve tipo "✓ Jugador agregado" en la parte de
+abajo de la pantalla.
+
+## Asignar jugadores a un equipo en cualquier momento
+
+Antes, un jugador solo podía entrar a un equipo durante el Draft (por
+turnos) o, después del Draft, solo si el admin activaba "cambios
+post-draft". Ahora, desde Jugadores, tocando el nombre de cualquier
+jugador, admin y capitán (a su propio equipo) pueden ponerlo o quitarlo
+de un equipo en cualquier momento — durante el Draft, después de
+terminado, o incluso con un partido en curso. Así un jugador que llega
+tarde se puede sumar a un equipo sin interrumpir nada.
+
+## Diseño para celular: notch / Dynamic Island
+
+Se agregó soporte de "safe area" (el margen que iOS reserva alrededor del
+notch, la Dynamic Island y la barra de inicio) en toda la app: la barra
+superior, el menú inferior, el login y todos los paneles que se abren
+desde abajo respetan ese margen para que ningún botón quede tapado o
+pegado al borde. También se agrandaron los botones más pequeños (el
+check de asistencia, el toggle de pagado, los inputs numéricos) a un
+tamaño cómodo para tocar con el dedo.

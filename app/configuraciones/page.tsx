@@ -12,7 +12,7 @@ export default function ConfiguracionesPage() {
   return (
     <>
       <TopBar sesion={sesion} />
-      <main className="mx-auto max-w-md px-4 pb-24 pt-6">
+      <main className="mx-auto max-w-md px-4 pb-28 pt-6">
         <ConfiguracionesClient sesion={sesion} />
       </main>
       <BottomNav rol={sesion.rol_sistema} />

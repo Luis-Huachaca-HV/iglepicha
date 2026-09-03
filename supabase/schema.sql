@@ -144,3 +144,22 @@ create policy "lectura publica valoraciones" on valoraciones for select using (t
 -- ---------- Datos semilla opcionales para probar ----------
 -- insert into usuarios (nombre, edad, rol_sistema, pin_hash) values
 --   ('Axl', 30, 'super_admin', null); -- setear pin_hash real desde /login la primera vez
+
+-- ============================================================
+-- Realtime: sin esto, ninguna suscripción en vivo del código funciona
+-- aunque esté bien escrita — es un interruptor a nivel de base de datos.
+-- ============================================================
+do $$
+declare
+  tabla text;
+begin
+  foreach tabla in array array['usuarios','jornadas','equipos_jornada','asistencia_draft','mini_partidos','eventos_partido']
+  loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = tabla
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', tabla);
+    end if;
+  end loop;
+end $$;

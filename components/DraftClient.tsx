@@ -2,14 +2,8 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import type { AsistenciaDraft, EquipoJornada, Jornada, RolSistema, SesionUsuario } from "@/lib/types";
-
-interface UsuarioLista {
-  id_usuario: string;
-  nombre: string;
-  edad: number | null;
-  rol_sistema: RolSistema;
-}
+import { useUsuarios, type UsuarioLista } from "@/lib/useUsuarios";
+import type { AsistenciaDraft, EquipoJornada, Jornada, SesionUsuario } from "@/lib/types";
 
 function promedioGeneral(stats: Record<string, number> | undefined): number | null {
   if (!stats) return null;
@@ -22,7 +16,7 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
   const [jornada, setJornada] = useState<Jornada | null>(null);
   const [equipos, setEquipos] = useState<EquipoJornada[]>([]);
   const [asistencias, setAsistencias] = useState<AsistenciaDraft[]>([]);
-  const [usuarios, setUsuarios] = useState<UsuarioLista[]>([]);
+  const { usuarios } = useUsuarios();
   const [ratings, setRatings] = useState<Record<string, number>>({});
   const [cupos, setCupos] = useState<Record<string, number>>({});
   const [candidato, setCandidato] = useState<UsuarioLista | null>(null);
@@ -48,9 +42,6 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
         setJornada(d.jornada);
         if (d.jornada) cargarTodo(d.jornada.id_jornada);
       });
-    fetch("/api/usuarios")
-      .then((r) => r.json())
-      .then((d) => setUsuarios(d.usuarios ?? []));
     supabase
       .from("valoraciones")
       .select("id_evaluado, stats")
@@ -222,7 +213,7 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
                   placeholder="Cupo"
                   value={cupos[e.id_equipo] ?? ""}
                   onChange={(ev) => setCupos((prev) => ({ ...prev, [e.id_equipo]: Number(ev.target.value) }))}
-                  className="w-16 rounded border border-pitch-700 bg-pitch-950 px-2 py-1 text-center text-sm"
+                  className="w-16 rounded border border-pitch-700 bg-pitch-950 px-2 py-2 text-center text-sm"
                 />
               ) : (
                 <span className="text-xs text-mist">Cupo por definir</span>
@@ -284,7 +275,7 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
                     <button
                       disabled={!esAdmin || !jornada.permitir_cambios_post_draft || jornada.draft_estado !== "finalizado"}
                       onClick={() => setTradeAbierto(u.id_usuario)}
-                      className="rounded-pill bg-pitch-800 px-2.5 py-1 text-xs disabled:opacity-100"
+                      className="rounded-pill bg-pitch-800 px-3 py-2 text-xs disabled:opacity-100"
                     >
                       {u.nombre}
                     </button>
@@ -369,7 +360,7 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
       {/* Mover jugador (cambios post-draft) */}
       {tradeAbierto && (
         <div className="fixed inset-0 z-20 flex items-end justify-center bg-pitch-950/80 backdrop-blur-sm" onClick={() => setTradeAbierto(null)}>
-          <div className="w-full max-w-md rounded-t-2xl border-t border-pitch-700 bg-pitch-900 p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-md rounded-t-2xl border-t border-pitch-700 bg-pitch-900 p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-4 font-display text-xl font-bold">Mover a {usuariosMap[tradeAbierto]?.nombre}</h2>
             <ul className="flex flex-col gap-2">
               {equipos

@@ -11,7 +11,7 @@ export default function CobranzaPage() {
   return (
     <>
       <TopBar sesion={sesion} />
-      <main className="mx-auto max-w-md px-4 pb-24 pt-6">
+      <main className="mx-auto max-w-md px-4 pb-28 pt-6">
         <CobranzaClient sesion={sesion} />
       </main>
       <BottomNav rol={sesion.rol_sistema} />

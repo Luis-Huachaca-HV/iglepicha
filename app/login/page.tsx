@@ -1,31 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { PinPad } from "@/components/PinPad";
-import { requierePin, type RolSistema } from "@/lib/types";
-
-interface UsuarioLista {
-  id_usuario: string;
-  nombre: string;
-  edad: number | null;
-  rol_sistema: RolSistema;
-  tiene_pin: boolean;
-}
+import { useUsuarios, type UsuarioLista } from "@/lib/useUsuarios";
+import { requierePin } from "@/lib/types";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [usuarios, setUsuarios] = useState<UsuarioLista[] | null>(null);
+  const { usuarios } = useUsuarios();
   const [seleccionado, setSeleccionado] = useState<UsuarioLista | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/usuarios")
-      .then((r) => r.json())
-      .then((d) => setUsuarios(d.usuarios ?? []))
-      .catch(() => setUsuarios([]));
-  }, []);
 
   async function ingresar(usuario: UsuarioLista, pin?: string, confirmarPin?: string) {
     setCargando(true);
@@ -56,7 +42,13 @@ export default function LoginPage() {
 
   if (seleccionado) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-8 px-6">
+      <main
+        className="flex min-h-screen flex-col items-center justify-center gap-8 px-6"
+        style={{
+          paddingTop: "max(1.5rem, env(safe-area-inset-top))",
+          paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))",
+        }}
+      >
         <PinPad
           titulo={`Hola, ${seleccionado.nombre.split(" ")[0]}`}
           subtitulo={
@@ -75,27 +67,30 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col px-6 py-10">
+    <main
+      className="mx-auto flex min-h-screen max-w-md flex-col px-6"
+      style={{
+        paddingTop: "max(2.5rem, env(safe-area-inset-top))",
+        paddingBottom: "max(2.5rem, env(safe-area-inset-bottom))",
+      }}
+    >
       <div className="mb-8">
         <p className="font-display text-sm uppercase tracking-wide text-turf-400">Pichangas</p>
         <h1 className="mt-1 font-display text-3xl font-bold">¿Quién juega hoy?</h1>
         <p className="mt-1 text-sm text-mist">Toca tu nombre para entrar.</p>
       </div>
 
-      {usuarios === null && <p className="text-mist">Cargando jugadores…</p>}
-
-      {usuarios !== null && usuarios.length === 0 && (
+      {usuarios.length === 0 && (
         <div className="linea-cancha mt-4 rounded border border-dashed border-pitch-700 p-6 text-center">
           <p className="text-chalk">Todavía no hay usuarios creados.</p>
           <p className="mt-2 text-sm text-mist">
-            Créalos desde el SQL Editor de Supabase (tabla <code className="text-turf-400">usuarios</code>) —
-            la pantalla de administración de usuarios llega en la siguiente fase.
+            Pídele a un admin que entre a Configuraciones y agregue el primer usuario.
           </p>
         </div>
       )}
 
       <ul className="grid grid-cols-2 gap-3">
-        {usuarios?.map((u) => (
+        {usuarios.map((u) => (
           <li key={u.id_usuario}>
             <button
               onClick={() => elegir(u)}
