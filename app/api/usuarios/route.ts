@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { esPinHashValido } from "@/lib/pin";
 
 // Nunca cachear: esta ruta siempre debe leer/escribir el estado más
 // reciente de Supabase, no una versión congelada del último deploy.
@@ -25,7 +26,7 @@ export async function GET() {
     nombre: u.nombre,
     edad: u.edad,
     rol_sistema: u.rol_sistema,
-    tiene_pin: !!u.pin_hash,
+    tiene_pin: esPinHashValido(u.pin_hash),
   }));
 
   return NextResponse.json({ usuarios });

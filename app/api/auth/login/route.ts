@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { hashPin, verifyPin } from "@/lib/pin";
+import { hashPin, verifyPin, esPinHashValido } from "@/lib/pin";
 import { crearCookieSesion, NOMBRE_COOKIE_SESION } from "@/lib/session";
 import { requierePin } from "@/lib/types";
 
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (requierePin(usuario.rol_sistema)) {
-    if (!usuario.pin_hash) {
+    if (!esPinHashValido(usuario.pin_hash)) {
       // Primer ingreso: crear PIN
       if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
         return NextResponse.json({ error: "El PIN debe tener 4 dígitos" }, { status: 400 });
