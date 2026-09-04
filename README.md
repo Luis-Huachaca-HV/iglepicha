@@ -266,3 +266,18 @@ Dos problemas juntos causaban esto:
 También se agregó un mensaje "🎉 ¡Gracias! Todos pagaron" en Cobranza que
 aparece solo cuando todos los jugadores con equipo asignado marcaron
 "Pagó".
+
+## Reglas de asistencia, draft y qué se conserva
+
+- **Cada "Nueva jornada" arranca en cero**: equipos, draft, cobranza y
+  partidos del día — todo nuevo. Lo único que persiste siempre son los
+  **usuarios** (jugadores) y el **historial de partidos** finalizados
+  (por fecha y hora), visible al final de la pestaña Partidos.
+- **Draft muestra en vivo quién falta**: en la pantalla de configuración
+  del draft aparece "Faltan N: nombre, nombre…" con los que aún no
+  marcaste presentes, actualizado al instante.
+- **Asistencia bloqueada una vez en el draft**: puedes desmarcar "presente"
+  libremente (por si te equivocaste) mientras esa persona no esté en
+  ningún equipo. En cuanto el draft la asigna a un equipo, el botón se
+  bloquea (🔒) — hay que sacarla del equipo primero (desde el detalle del
+  jugador) si de verdad hay que corregirlo.

@@ -107,16 +107,22 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
 
   async function marcar(idUsuario: string, presente: boolean) {
     if (!jornada) return;
+    const anterior = asistencias[idUsuario];
     // Optimista: refleja el cambio de inmediato, la suscripción realtime confirma
     setAsistencias((prev) => ({
       ...prev,
       [idUsuario]: { ...(prev[idUsuario] as AsistenciaDraft), id_usuario: idUsuario, id_jornada: jornada.id_jornada, presente } as AsistenciaDraft,
     }));
-    await fetch("/api/asistencia", {
+    const res = await fetch("/api/asistencia", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id_jornada: jornada.id_jornada, id_usuario: idUsuario, presente }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setAsistencias((prev) => ({ ...prev, [idUsuario]: anterior as AsistenciaDraft }));
+      mostrarToast(data.error ?? "No se pudo actualizar la asistencia");
+    }
   }
 
   async function asignarEquipo(idUsuario: string, idEquipo: string | null) {
@@ -225,6 +231,8 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
       <ul className="linea-cancha flex flex-col divide-y divide-pitch-800 pt-2">
         {usuariosFiltrados.map((u) => {
           const presente = !!asistencias[u.id_usuario]?.presente;
+          const enEquipo = !!asistencias[u.id_usuario]?.id_equipo;
+          const bloqueadoQuitar = presente && enEquipo;
           return (
             <li key={u.id_usuario} className="flex items-center justify-between py-2">
               <button className="flex flex-1 items-center gap-3 py-1.5 text-left" onClick={() => setSeleccionado(u.id_usuario)}>
@@ -239,14 +247,15 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
                 </span>
               </button>
               <button
-                disabled={!puedeMarcarAOtros && sesion.id_usuario !== u.id_usuario}
+                disabled={(!puedeMarcarAOtros && sesion.id_usuario !== u.id_usuario) || bloqueadoQuitar}
                 onClick={() => marcar(u.id_usuario, !presente)}
+                title={bloqueadoQuitar ? "Ya está en un equipo del draft — no se puede quitar" : undefined}
                 className={`flex h-11 w-11 shrink-0 items-center justify-center rounded border-2 transition ${
                   presente ? "border-turf-500 bg-turf-500" : "border-pitch-700 bg-transparent"
-                } disabled:opacity-30`}
+                } disabled:opacity-60`}
                 aria-label={presente ? "Marcar ausente" : "Marcar presente"}
               >
-                {presente && <span className="text-lg text-pitch-950">✓</span>}
+                {presente && <span className={`text-lg ${bloqueadoQuitar ? "text-pitch-950/70" : "text-pitch-950"}`}>{bloqueadoQuitar ? "🔒" : "✓"}</span>}
               </button>
             </li>
           );

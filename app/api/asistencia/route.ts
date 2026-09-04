@@ -31,6 +31,22 @@ export async function POST(req: NextRequest) {
   }
 
   const admin = supabaseAdmin();
+
+  if (!presente) {
+    const { data: actual } = await admin
+      .from("asistencia_draft")
+      .select("id_equipo")
+      .eq("id_jornada", id_jornada)
+      .eq("id_usuario", id_usuario)
+      .maybeSingle();
+    if (actual?.id_equipo) {
+      return NextResponse.json(
+        { error: "Ya está en un equipo del draft — no se puede quitar su asistencia hoy." },
+        { status: 400 }
+      );
+    }
+  }
+
   const { data, error } = await admin
     .from("asistencia_draft")
     .upsert(

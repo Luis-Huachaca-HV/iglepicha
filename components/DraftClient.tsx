@@ -98,6 +98,10 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
     usuarios,
     asistenciaPorUsuario,
   ]);
+  const ausentes = useMemo(() => usuarios.filter((u) => !asistenciaPorUsuario[u.id_usuario]?.presente), [
+    usuarios,
+    asistenciaPorUsuario,
+  ]);
 
   const bolsa = useMemo(
     () => presentes.filter((u) => !asistenciaPorUsuario[u.id_usuario]?.id_equipo),
@@ -201,6 +205,11 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
         <div>
           <h1 className="font-display text-2xl font-bold">Draft</h1>
           <p className="text-sm text-mist">{presentes.length} jugadores presentes en total.</p>
+          {ausentes.length > 0 && (
+            <p className="mt-1 text-xs text-mist">
+              Faltan {ausentes.length}: {ausentes.map((u) => u.nombre).join(", ")}
+            </p>
+          )}
         </div>
         <ul className="flex flex-col gap-3">
           {equipos.map((e) => (

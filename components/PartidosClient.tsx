@@ -23,6 +23,15 @@ export function PartidosClient({ sesion }: { sesion: SesionUsuario }) {
   const [eventoEditando, setEventoEditando] = useState<EventoPartido | null>(null);
   const [modalEmpate, setModalEmpate] = useState(false);
   const [cargando, setCargando] = useState(false);
+  const [historial, setHistorial] = useState<
+    { id_partido: string; fecha_hora: string | null; equipo_a: string; equipo_b: string; marcador_a: number; marcador_b: number }[]
+  >([]);
+
+  useEffect(() => {
+    fetch("/api/partidos/historial", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setHistorial(d.historial ?? []));
+  }, [partido?.estado]);
 
   const esAdmin = sesion.rol_sistema === "admin" || sesion.rol_sistema === "super_admin";
   const puedeAnotar = esAdmin || sesion.rol_sistema === "capitan";
@@ -352,6 +361,40 @@ export function PartidosClient({ sesion }: { sesion: SesionUsuario }) {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Historial: lo único que se conserva entre jornadas */}
+      {historial.length > 0 && (
+        <div>
+          <h2 className="mb-2 font-display text-lg font-bold">Historial</h2>
+          {Object.entries(
+            historial.reduce<Record<string, typeof historial>>((grupos, p) => {
+              const fecha = p.fecha_hora
+                ? new Date(p.fecha_hora).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" })
+                : "Sin fecha";
+              (grupos[fecha] ??= []).push(p);
+              return grupos;
+            }, {})
+          ).map(([fecha, partidosDia]) => (
+            <div key={fecha} className="mb-3">
+              <p className="mb-1 text-xs uppercase tracking-wide text-mist">{fecha}</p>
+              <ul className="flex flex-col divide-y divide-pitch-800">
+                {partidosDia.map((p) => (
+                  <li key={p.id_partido} className="flex items-center justify-between py-2 text-sm">
+                    <span className="text-mist">
+                      {p.fecha_hora
+                        ? new Date(p.fecha_hora).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" })
+                        : "--:--"}
+                    </span>
+                    <span>
+                      {p.equipo_a} <strong>{p.marcador_a}-{p.marcador_b}</strong> {p.equipo_b}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
       )}
 
