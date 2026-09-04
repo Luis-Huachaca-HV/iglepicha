@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import type { Jornada, SesionUsuario } from "@/lib/types";
@@ -12,10 +13,12 @@ const ETIQUETA_ESTADO: Record<string, string> = {
 };
 
 export function DashboardClient({ sesion }: { sesion: SesionUsuario }) {
+  const router = useRouter();
   const [jornada, setJornada] = useState<Jornada | null>(null);
   const [presentes, setPresentes] = useState(0);
   const [equipos, setEquipos] = useState(0);
   const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const esAdmin = sesion.rol_sistema === "admin" || sesion.rol_sistema === "super_admin";
 
   const cargarConteos = useCallback(async (idJornada: string) => {
@@ -31,14 +34,33 @@ export function DashboardClient({ sesion }: { sesion: SesionUsuario }) {
     setEquipos(countEquipos ?? 0);
   }, []);
 
-  useEffect(() => {
-    fetch("/api/jornada/active")
-      .then((r) => r.json())
-      .then((d) => {
-        setJornada(d.jornada);
-        if (d.jornada) cargarConteos(d.jornada.id_jornada);
-      });
+  const cargarJornadaActiva = useCallback(async () => {
+    const r = await fetch("/api/jornada/active", { cache: "no-store" });
+    const d = await r.json();
+    setJornada(d.jornada);
+    if (d.jornada) cargarConteos(d.jornada.id_jornada);
+    return d.jornada as Jornada | null;
   }, [cargarConteos]);
+
+  useEffect(() => {
+    cargarJornadaActiva();
+  }, [cargarJornadaActiva]);
+
+  // Red de seguridad extra: si vuelves a esta pantalla después de estar en
+  // segundo plano (cambiaste de app, volviste del bloqueo de pantalla,
+  // etc.), vuelve a consultar el estado real en vez de confiar en lo que
+  // quedó en memoria.
+  useEffect(() => {
+    function alVolverAEnfocar() {
+      if (document.visibilityState === "visible") cargarJornadaActiva();
+    }
+    document.addEventListener("visibilitychange", alVolverAEnfocar);
+    window.addEventListener("focus", alVolverAEnfocar);
+    return () => {
+      document.removeEventListener("visibilitychange", alVolverAEnfocar);
+      window.removeEventListener("focus", alVolverAEnfocar);
+    };
+  }, [cargarJornadaActiva]);
 
   useEffect(() => {
     if (!jornada) return;
@@ -68,14 +90,40 @@ export function DashboardClient({ sesion }: { sesion: SesionUsuario }) {
   async function cambiarEstado(accion: "iniciar" | "finalizar") {
     if (!jornada) return;
     setCargando(true);
+    setError(null);
     const res = await fetch("/api/jornada/estado", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id_jornada: jornada.id_jornada, accion }),
+      cache: "no-store",
     });
     const data = await res.json();
+    if (!res.ok) {
+      setCargando(false);
+      setError(data.error ?? "No se pudo actualizar la jornada. Inténtalo de nuevo.");
+      return;
+    }
+    // Confirma contra la base de datos (no solo contra la respuesta del
+    // POST) y refresca el árbol de Next para invalidar cualquier caché de
+    // navegación al volver a esta pantalla.
+    await cargarJornadaActiva();
+    router.refresh();
     setCargando(false);
-    if (res.ok) setJornada(data.jornada);
+  }
+
+  async function nuevaJornada() {
+    setCargando(true);
+    setError(null);
+    const res = await fetch("/api/jornada/nueva", { method: "POST", cache: "no-store" });
+    const data = await res.json();
+    if (!res.ok) {
+      setCargando(false);
+      setError(data.error ?? "No se pudo crear la jornada nueva.");
+      return;
+    }
+    await cargarJornadaActiva();
+    router.refresh();
+    setCargando(false);
   }
 
   if (!jornada) {
@@ -108,6 +156,8 @@ export function DashboardClient({ sesion }: { sesion: SesionUsuario }) {
         <span className="font-medium">{ETIQUETA_ESTADO[jornada.estado]}</span>
       </section>
 
+      {error && <p className="text-center text-sm text-card-red">{error}</p>}
+
       {esAdmin && jornada.estado !== "finalizada" && (
         <button
           onClick={() => cambiarEstado(jornada.estado === "pendiente" ? "iniciar" : "finalizar")}
@@ -116,8 +166,23 @@ export function DashboardClient({ sesion }: { sesion: SesionUsuario }) {
             jornada.estado === "pendiente" ? "bg-turf-500 text-pitch-950" : "bg-card-red text-chalk"
           }`}
         >
-          {jornada.estado === "pendiente" ? "Iniciar jornada" : "Finalizar jornada"}
+          {cargando ? "Guardando…" : jornada.estado === "pendiente" ? "Iniciar jornada" : "Finalizar jornada"}
         </button>
+      )}
+
+      {jornada.estado === "finalizada" && (
+        <div className="rounded border border-dashed border-turf-500 bg-pitch-900 p-4 text-center">
+          <p className="text-sm text-turf-400">✓ Jornada finalizada. Cobranza ya está desbloqueada.</p>
+          {esAdmin && (
+            <button
+              onClick={nuevaJornada}
+              disabled={cargando}
+              className="mt-3 w-full rounded-pill bg-turf-500 py-3 font-display font-bold text-pitch-950 disabled:opacity-50"
+            >
+              {cargando ? "Creando…" : "Comenzar jornada nueva"}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

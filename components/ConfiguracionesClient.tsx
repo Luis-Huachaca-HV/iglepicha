@@ -31,7 +31,7 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
   const esSuperAdmin = sesion.rol_sistema === "super_admin";
 
   useEffect(() => {
-    fetch("/api/jornada/active")
+    fetch("/api/jornada/active", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         setJornada(d.jornada);

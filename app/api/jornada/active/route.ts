@@ -6,16 +6,18 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 export const dynamic = "force-dynamic";
 
 // GET /api/jornada/active
-// Devuelve la jornada más reciente que no esté finalizada. Si no existe
-// ninguna, crea una nueva en estado "pendiente" para que Dashboard y
-// Jugadores tengan algo contra qué trabajar.
+// Devuelve la jornada más reciente, SEA CUAL SEA SU ESTADO (incluida una
+// ya finalizada) — para que Cobranza, Draft, Partidos, etc. se queden
+// mostrando esa jornada hasta que el admin decida explícitamente empezar
+// una nueva (botón "Nueva jornada" en el Dashboard, ver /api/jornada/nueva).
+// Solo se auto-crea una jornada si de verdad no existe NINGUNA todavía
+// (primera vez que se usa la app).
 export async function GET() {
   const admin = supabaseAdmin();
 
   const { data: existente, error } = await admin
     .from("jornadas")
     .select("*")
-    .neq("estado", "finalizada")
     .order("creado_en", { ascending: false })
     .limit(1)
     .maybeSingle();

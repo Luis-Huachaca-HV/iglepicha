@@ -46,7 +46,7 @@ export function PartidosClient({ sesion }: { sesion: SesionUsuario }) {
   }, []);
 
   useEffect(() => {
-    fetch("/api/jornada/active")
+    fetch("/api/jornada/active", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         setJornada(d.jornada);

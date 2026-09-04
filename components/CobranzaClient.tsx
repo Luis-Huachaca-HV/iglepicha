@@ -31,7 +31,7 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
   }, []);
 
   useEffect(() => {
-    fetch("/api/jornada/active")
+    fetch("/api/jornada/active", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         setJornada(d.jornada);
@@ -115,6 +115,9 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
     return suma + roster.filter((a) => a.pago_realizado).length * cuotaJugador;
   }, 0);
 
+  const hayJugadores = equipos.some((e) => rosterDe(e.id_equipo).length > 0);
+  const todosPagaron = hayJugadores && equipos.every((e) => rosterDe(e.id_equipo).every((a) => a.pago_realizado));
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -123,6 +126,15 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
           {soles(totalRecaudado)} recaudados de {soles(jornada.costo_total || 0)}
         </p>
       </div>
+
+      {todosPagaron && (
+        <div className="rounded border border-turf-500 bg-pitch-900 p-4 text-center">
+          <p className="font-display text-lg font-bold text-turf-400">🎉 ¡Gracias! Todos pagaron.</p>
+          <p className="mt-1 text-xs text-mist">
+            {jornada.estado === "finalizada" ? "Jornada cerrada por completo." : "La cobranza de esta jornada quedó al día."}
+          </p>
+        </div>
+      )}
 
       {bloqueado && (
         <div className="rounded border border-dashed border-pitch-700 bg-pitch-900 px-4 py-3 text-center text-sm text-mist">

@@ -244,3 +244,25 @@ Ahora **todas** las rutas de `/api/*` tienen `export const dynamic =
 fresca, nunca la guardes". Lo puedes confirmar vos mismo: en la salida de
 `npm run build`, cada ruta bajo `/api/` debe aparecer marcada con `ƒ`
 (Dynamic) — si alguna vez ves una marcada `○` (Static), avísame.
+
+## Corrección: "Finalizar jornada" no se quedaba finalizada
+
+Dos problemas juntos causaban esto:
+
+1. El botón fallaba en silencio si la petición no se completaba bien — ya
+   no: ahora muestra un mensaje de error abajo si algo sale mal, y
+   confirma el cambio contra la base de datos (no solo contra la
+   respuesta del click) antes de darlo por hecho.
+2. **La causa de fondo**: apenas una jornada quedaba "finalizada",
+   `/api/jornada/active` creaba automáticamente una jornada NUEVA en
+   blanco la siguiente vez que cualquier pantalla la consultaba — así que
+   Cobranza, Draft, etc. "perdían" la jornada que acababas de cerrar y
+   parecía que nunca se había finalizado. Ahora eso ya no pasa solo: la
+   app se queda mostrando la jornada finalizada (con Cobranza ya
+   desbloqueada) hasta que el admin toca el nuevo botón **"Comenzar
+   jornada nueva"** en el Dashboard. Recién ahí se crea una jornada en
+   blanco de verdad.
+
+También se agregó un mensaje "🎉 ¡Gracias! Todos pagaron" en Cobranza que
+aparece solo cuando todos los jugadores con equipo asignado marcaron
+"Pagó".
