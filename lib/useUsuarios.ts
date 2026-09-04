@@ -19,7 +19,7 @@ export function useUsuarios() {
   const [usuarios, setUsuarios] = useState<UsuarioLista[]>([]);
 
   const recargarUsuarios = useCallback(() => {
-    fetch("/api/usuarios")
+    fetch(`/api/usuarios?_=${Date.now()}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => setUsuarios(d.usuarios ?? []))
       .catch(() => {});
