@@ -281,3 +281,24 @@ aparece solo cuando todos los jugadores con equipo asignado marcaron
   ningún equipo. En cuanto el draft la asigna a un equipo, el botón se
   bloquea (🔒) — hay que sacarla del equipo primero (desde el detalle del
   jugador) si de verdad hay que corregirlo.
+
+## Corrección permanente: la app se "congelaba" o los bugs viejos volvían
+
+Si después de instalar una actualización seguías viendo un bug que ya
+habíamos corregido (el PIN, pantallas que no se actualizan), la causa más
+probable no era el código: era que tu celular tenía **guardada en caché
+una versión vieja** de la app, así que seguía corriendo el JavaScript de
+antes aunque el servidor ya tuviera el arreglo.
+
+Esto ya no debería volver a pasar — `next.config.mjs` ahora fuerza:
+- Cero caché de navegación dentro de la app (`staleTimes` en 0): cada vez
+  que cambias de pestaña, se vuelve a pedir todo fresco, nunca se queda
+  con una foto vieja.
+- `Cache-Control: no-store` en todas las respuestas, para que ni el
+  navegador ni Vercel guarden nada.
+
+**Un solo paso manual, una sola vez**, para limpiar lo que tu iPhone ya
+tenía guardado de antes de este fix: en el iPhone, ve a Ajustes → Safari
+→ "Borrar historial y datos de sitios web" (o, más simple, abre la app en
+una pestaña de Navegación Privada para probar). Después de eso, con este
+fix instalado, no debería volver a necesitarse.
