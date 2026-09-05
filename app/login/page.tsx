@@ -9,7 +9,8 @@ import { requierePin } from "@/lib/types";
 export default function LoginPage() {
   const router = useRouter();
   const { usuarios } = useUsuarios();
-  const [seleccionado, setSeleccionado] = useState<UsuarioLista | null>(null);
+  const [seleccionadoId, setSeleccionadoId] = useState<string | null>(null);
+  const seleccionado = usuarios.find((u) => u.id_usuario === seleccionadoId) ?? null;
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
 
@@ -36,7 +37,7 @@ export default function LoginPage() {
     if (!requierePin(usuario.rol_sistema)) {
       ingresar(usuario);
     } else {
-      setSeleccionado(usuario);
+      setSeleccionadoId(usuario.id_usuario);
     }
   }
 
@@ -59,7 +60,7 @@ export default function LoginPage() {
           cargando={cargando}
           onSubmit={(pin, confirmarPin) => ingresar(seleccionado, pin, confirmarPin)}
         />
-        <button onClick={() => setSeleccionado(null)} className="text-sm text-mist underline underline-offset-4">
+        <button onClick={() => setSeleccionadoId(null)} className="text-sm text-mist underline underline-offset-4">
           Elegir otra persona
         </button>
       </main>

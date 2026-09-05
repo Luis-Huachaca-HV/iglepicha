@@ -350,3 +350,16 @@ desincronizado. Ahora ese cambio de rol se **bloquea con un mensaje claro**
 mientras la persona siga capitaneando un equipo en la jornada activa — hay
 que sacarlo del equipo desde Jugadores/Draft primero. Si necesitas poder
 reemplazar a un capitán por otro directamente, dímelo y agrego ese botón.
+
+## Correcciones: login "pegado" al estado viejo, y doble-toque en Iniciar jornada
+
+- **Login mostraba el PIN viejo**: al tocar tu nombre, la pantalla de PIN
+  guardaba una "foto" fija de tu usuario en ese instante. Si alguien te
+  reseteaba el PIN o te cambiaba el rol MIENTRAS estabas parado en esa
+  pantalla, seguías viendo la versión vieja. Ahora esa pantalla lee tu
+  estado en vivo todo el tiempo, igual que el resto de la app.
+- **"Iniciar jornada" pedía dos toques**: le quité un paso extra
+  (`router.refresh()` + una segunda consulta) que ya no hacía falta desde
+  que se corrigió lo de las jornadas duplicadas — ahora el botón actualiza
+  la pantalla directo con la respuesta del primer toque, sin pasos de más
+  que puedan pisarse entre sí.

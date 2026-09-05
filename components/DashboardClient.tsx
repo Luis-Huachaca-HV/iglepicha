@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import type { Jornada, SesionUsuario } from "@/lib/types";
@@ -13,7 +12,6 @@ const ETIQUETA_ESTADO: Record<string, string> = {
 };
 
 export function DashboardClient({ sesion }: { sesion: SesionUsuario }) {
-  const router = useRouter();
   const [jornada, setJornada] = useState<Jornada | null>(null);
   const [presentes, setPresentes] = useState(0);
   const [equipos, setEquipos] = useState(0);
@@ -103,11 +101,7 @@ export function DashboardClient({ sesion }: { sesion: SesionUsuario }) {
       setError(data.error ?? "No se pudo actualizar la jornada. Inténtalo de nuevo.");
       return;
     }
-    // Confirma contra la base de datos (no solo contra la respuesta del
-    // POST) y refresca el árbol de Next para invalidar cualquier caché de
-    // navegación al volver a esta pantalla.
-    await cargarJornadaActiva();
-    router.refresh();
+    setJornada(data.jornada);
     setCargando(false);
   }
 
@@ -121,8 +115,9 @@ export function DashboardClient({ sesion }: { sesion: SesionUsuario }) {
       setError(data.error ?? "No se pudo crear la jornada nueva.");
       return;
     }
-    await cargarJornadaActiva();
-    router.refresh();
+    setJornada(data.jornada);
+    setPresentes(0);
+    setEquipos(0);
     setCargando(false);
   }
 
