@@ -1,10 +1,13 @@
 export type RolSistema = "super_admin" | "admin" | "capitan" | "jugador_registrado";
 
+export type Posicion = "POR" | "DEF" | "MC" | "DEL";
+
 export interface Usuario {
   id_usuario: string;
   nombre: string;
   edad: number | null;
   rol_sistema: RolSistema;
+  posicion: Posicion | null;
   pin_hash: string | null;
 }
 
@@ -38,6 +41,7 @@ export interface EquipoJornada {
   cupo_max: number | null;
   orden_turno: number | null;
   orden_cola: number | null;
+  pago_entregado_admin: boolean;
 }
 
 export type EstadoPartido = "pendiente" | "en_curso" | "finalizado";

@@ -14,12 +14,14 @@ create extension if not exists "pgcrypto";
 
 -- ---------- Usuarios ----------
 create type rol_sistema as enum ('super_admin', 'admin', 'capitan', 'jugador_registrado');
+create type posicion_jugador as enum ('POR', 'DEF', 'MC', 'DEL');
 
 create table usuarios (
   id_usuario uuid primary key default gen_random_uuid(),
   nombre text not null,
   edad int,
   rol_sistema rol_sistema not null default 'jugador_registrado',
+  posicion posicion_jugador,
   -- PIN de 4 dígitos, solo requerido para super_admin / admin / capitan.
   -- Guardado hasheado (ver nota de seguridad en README) — nunca en texto plano en producción.
   pin_hash text,
@@ -56,7 +58,9 @@ create table equipos_jornada (
   cupo_max int,
   orden_turno int,
   -- Partidos: posición en la cola de "el que gana se queda" (null = jugando o sin iniciar cola)
-  orden_cola int
+  orden_cola int,
+  -- Cobranza: si el capitán ya le entregó el total de su equipo al admin
+  pago_entregado_admin boolean not null default false
 );
 
 alter table jornadas

@@ -1,6 +1,6 @@
 "use client";
 
-const ETIQUETAS: { clave: string; label: string }[] = [
+export const ETIQUETAS: { clave: string; label: string }[] = [
   { clave: "velocidad", label: "Vel" },
   { clave: "resistencia", label: "Res" },
   { clave: "ataque", label: "Ata" },

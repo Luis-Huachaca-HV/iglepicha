@@ -17,9 +17,11 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
   const [costoInput, setCostoInput] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmarPago, setConfirmarPago] = useState<{ id_usuario: string; nombre: string } | null>(null);
+  const [confirmarEntrega, setConfirmarEntrega] = useState<EquipoJornada | null>(null);
 
   const esAdmin = sesion.rol_sistema === "admin" || sesion.rol_sistema === "super_admin";
-  const puedeMarcarAOtros = ["admin", "super_admin", "capitan"].includes(sesion.rol_sistema);
+  const puedeMarcarPago = ["admin", "super_admin", "capitan"].includes(sesion.rol_sistema);
 
   const cargarEquiposYAsistencias = useCallback(async (idJornada: string) => {
     const [{ data: eq }, { data: asis }] = await Promise.all([
@@ -95,15 +97,27 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
     setEquipos(data.equipos ?? []);
   }
 
-  async function marcarPago(idUsuario: string, pagado: boolean) {
-    if (!jornada) return;
-    setAsistencias((prev) =>
-      prev.map((a) => (a.id_usuario === idUsuario ? { ...a, pago_realizado: pagado } : a))
-    );
+  async function confirmarMarcarPago() {
+    if (!jornada || !confirmarPago) return;
+    const idUsuario = confirmarPago.id_usuario;
+    setConfirmarPago(null);
+    setAsistencias((prev) => prev.map((a) => (a.id_usuario === idUsuario ? { ...a, pago_realizado: true } : a)));
     await fetch("/api/cobranza/pago", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id_jornada: jornada.id_jornada, id_usuario: idUsuario, pago_realizado: pagado }),
+      body: JSON.stringify({ id_jornada: jornada.id_jornada, id_usuario: idUsuario, pago_realizado: true }),
+    });
+  }
+
+  async function confirmarMarcarEntrega() {
+    if (!confirmarEntrega) return;
+    const idEquipo = confirmarEntrega.id_equipo;
+    setConfirmarEntrega(null);
+    setEquipos((prev) => prev.map((e) => (e.id_equipo === idEquipo ? { ...e, pago_entregado_admin: true } : e)));
+    await fetch("/api/cobranza/entregado", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_equipo: idEquipo }),
     });
   }
 
@@ -115,8 +129,7 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
     return suma + roster.filter((a) => a.pago_realizado).length * cuotaJugador;
   }, 0);
 
-  const hayJugadores = equipos.some((e) => rosterDe(e.id_equipo).length > 0);
-  const todosPagaron = hayJugadores && equipos.every((e) => rosterDe(e.id_equipo).every((a) => a.pago_realizado));
+  const todoConcluido = equipos.length > 0 && equipos.every((e) => e.pago_entregado_admin);
 
   return (
     <div className="flex flex-col gap-6">
@@ -127,12 +140,10 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
         </p>
       </div>
 
-      {todosPagaron && (
+      {todoConcluido && (
         <div className="rounded border border-turf-500 bg-pitch-900 p-4 text-center">
-          <p className="font-display text-lg font-bold text-turf-400">🎉 ¡Gracias! Todos pagaron.</p>
-          <p className="mt-1 text-xs text-mist">
-            {jornada.estado === "finalizada" ? "Jornada cerrada por completo." : "La cobranza de esta jornada quedó al día."}
-          </p>
+          <p className="font-display text-lg font-bold text-turf-400">🎉 ¡Gracias! Todo concluido.</p>
+          <p className="mt-1 text-xs text-mist">Todos los capitanes entregaron el total al admin.</p>
         </div>
       )}
 
@@ -173,13 +184,17 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
           const cuotaJugador = roster.length > 0 ? (e.cuota_equipo || 0) / roster.length : 0;
           const pagados = roster.filter((a) => a.pago_realizado).length;
           return (
-            <div key={e.id_equipo} className="rounded border border-pitch-800 bg-pitch-900 p-4">
+            <div
+              key={e.id_equipo}
+              className={`rounded border p-4 ${e.pago_entregado_admin ? "border-turf-500 bg-pitch-900" : "border-pitch-800 bg-pitch-900"}`}
+            >
               <div className="mb-2 flex items-center justify-between">
                 <span className="font-display font-bold">Equipo de {usuariosMap[e.id_capitan ?? ""]?.nombre ?? "?"}</span>
                 <span className="text-xs text-mist">
                   {soles(e.cuota_equipo || 0)} · {pagados}/{roster.length} pagaron
                 </span>
               </div>
+
               <ul className="flex flex-col divide-y divide-pitch-800">
                 {roster.map((a) => (
                   <li key={a.id_usuario} className="flex items-center justify-between py-2">
@@ -188,18 +203,30 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
                       <span className="ml-2 text-xs text-mist">{soles(cuotaJugador)}</span>
                     </span>
                     <button
-                      disabled={bloqueado || (!puedeMarcarAOtros && sesion.id_usuario !== a.id_usuario)}
-                      onClick={() => marcarPago(a.id_usuario, !a.pago_realizado)}
-                      className={`rounded-pill px-3 py-2.5 text-xs font-bold transition disabled:opacity-30 ${
+                      disabled={bloqueado || !puedeMarcarPago || a.pago_realizado}
+                      onClick={() => setConfirmarPago({ id_usuario: a.id_usuario, nombre: usuariosMap[a.id_usuario]?.nombre ?? "?" })}
+                      className={`rounded-pill px-3 py-2.5 text-xs font-bold transition disabled:opacity-60 ${
                         a.pago_realizado ? "bg-turf-500 text-pitch-950" : "border border-pitch-700 text-mist"
                       }`}
                     >
-                      {a.pago_realizado ? "Pagó" : "Debe"}
+                      {a.pago_realizado ? "✓ Pagó" : "Debe"}
                     </button>
                   </li>
                 ))}
                 {roster.length === 0 && <p className="py-2 text-xs text-mist">Sin jugadores asignados.</p>}
               </ul>
+
+              {esAdmin && (
+                <button
+                  disabled={bloqueado || e.pago_entregado_admin}
+                  onClick={() => setConfirmarEntrega(e)}
+                  className={`mt-3 w-full rounded-pill py-2.5 text-xs font-bold disabled:opacity-70 ${
+                    e.pago_entregado_admin ? "bg-turf-700 text-chalk" : "border border-dashed border-floodlight text-floodlight"
+                  }`}
+                >
+                  {e.pago_entregado_admin ? "✓ Capitán entregó el total al admin" : `Capitán entregó ${soles(e.cuota_equipo || 0)} al admin`}
+                </button>
+              )}
             </div>
           );
         })}
@@ -209,6 +236,47 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
           </div>
         )}
       </div>
+
+      {/* Confirmación: marcar pago de un jugador (sin vuelta atrás) */}
+      {confirmarPago && (
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-pitch-950/80 p-6 backdrop-blur-sm" onClick={() => setConfirmarPago(null)}>
+          <div className="w-full max-w-sm rounded-2xl border border-pitch-700 bg-pitch-900 p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <p className="mb-1 text-sm text-mist">¿Confirmar que</p>
+            <p className="mb-6 font-display text-xl font-bold">{confirmarPago.nombre} pagó?</p>
+            <p className="mb-4 text-xs text-mist">Esta acción no se puede deshacer.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmarPago(null)} className="flex-1 rounded-pill border border-pitch-700 py-3 text-sm">
+                Cancelar
+              </button>
+              <button onClick={confirmarMarcarPago} className="flex-1 rounded-pill bg-turf-500 py-3 text-sm font-bold text-pitch-950">
+                Sí, pagó
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmación: capitán entregó el total al admin (sin vuelta atrás) */}
+      {confirmarEntrega && (
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-pitch-950/80 p-6 backdrop-blur-sm" onClick={() => setConfirmarEntrega(null)}>
+          <div className="w-full max-w-sm rounded-2xl border border-pitch-700 bg-pitch-900 p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <p className="mb-1 text-sm text-mist">¿Confirmar que el capitán de</p>
+            <p className="mb-1 font-display text-xl font-bold">
+              Equipo de {usuariosMap[confirmarEntrega.id_capitan ?? ""]?.nombre ?? "?"}
+            </p>
+            <p className="mb-6 text-sm text-mist">te entregó {soles(confirmarEntrega.cuota_equipo || 0)}?</p>
+            <p className="mb-4 text-xs text-mist">Esta acción no se puede deshacer.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmarEntrega(null)} className="flex-1 rounded-pill border border-pitch-700 py-3 text-sm">
+                Cancelar
+              </button>
+              <button onClick={confirmarMarcarEntrega} className="flex-1 rounded-pill bg-turf-500 py-3 text-sm font-bold text-pitch-950">
+                Sí, entregó
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

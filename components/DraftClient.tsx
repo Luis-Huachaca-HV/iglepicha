@@ -312,7 +312,10 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
                 >
                   <span>
                     <span className="block text-sm font-medium">{u.nombre}</span>
-                    <span className="block text-xs text-mist">{u.edad ? `${u.edad} años` : "Edad no registrada"}</span>
+                    <span className="block text-xs text-mist">
+                    {u.edad ? `${u.edad} años` : "Edad no registrada"}
+                    {u.posicion ? ` · ${u.posicion}` : ""}
+                  </span>
                   </span>
                   <span className="font-display text-sm font-bold text-turf-400">
                     {ratings[u.id_usuario] ? ratings[u.id_usuario].toFixed(1) : "S/C"}

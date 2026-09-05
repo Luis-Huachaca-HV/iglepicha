@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { esPinHashValido } from "@/lib/pin-formato";
-import type { RolSistema } from "@/lib/types";
+import type { Posicion, RolSistema } from "@/lib/types";
 
 export interface UsuarioLista {
   id_usuario: string;
   nombre: string;
   edad: number | null;
   rol_sistema: RolSistema;
+  posicion: Posicion | null;
   tiene_pin: boolean;
 }
 
@@ -24,7 +25,7 @@ export function useUsuarios() {
   const recargarUsuarios = useCallback(async () => {
     const { data } = await supabase
       .from("usuarios")
-      .select("id_usuario, nombre, edad, rol_sistema, pin_hash")
+      .select("id_usuario, nombre, edad, rol_sistema, posicion, pin_hash")
       .order("nombre", { ascending: true });
     setUsuarios(
       (data || []).map((u) => ({
@@ -32,6 +33,7 @@ export function useUsuarios() {
         nombre: u.nombre,
         edad: u.edad,
         rol_sistema: u.rol_sistema,
+        posicion: u.posicion,
         tiene_pin: esPinHashValido(u.pin_hash),
       }))
     );

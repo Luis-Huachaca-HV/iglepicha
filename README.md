@@ -363,3 +363,28 @@ reemplazar a un capitán por otro directamente, dímelo y agrego ese botón.
   que se corrigió lo de las jornadas duplicadas — ahora el botón actualiza
   la pantalla directo con la respuesta del primer toque, sin pasos de más
   que puedan pisarse entre sí.
+
+## Cobranza de dos niveles (corregido según el flujo real)
+
+1. Admin define el costo total → se reparte entre equipos (capitanes),
+   como antes.
+2. **Jugador → Capitán**: admin o capitán marcan si un jugador pagó.
+   Ahora pide **confirmación** antes de marcarlo, y una vez marcado
+   **no se puede deshacer** (ni en botón ni en el servidor) — evita que un
+   mal click borre un pago ya confirmado. Los jugadores ya no pueden
+   automarcarse (solo capitán/admin, según pediste).
+3. **Capitán → Admin**: nuevo botón por equipo, solo para admin, "Capitán
+   entregó S/ X al admin" — también con confirmación y sin vuelta atrás.
+   El mensaje "🎉 Todo concluido" ahora aparece cuando **todos los
+   capitanes** entregaron su total al admin (no cuando los jugadores le
+   pagaron a su capitán, que es un paso intermedio).
+
+## Posición y valoración de jugadores
+
+- Cada jugador tiene una **posición**: POR, DEF, MC o DEL. Se asigna desde
+  el detalle del jugador en Jugadores (solo admin).
+- Desde ahí mismo, admin o capitán pueden **poner o editar la valoración**
+  de cualquier jugador (los 9 atributos, 1-10) — ya no hace falta esperar
+  un sistema de votos entre todos.
+- El Draft ahora muestra **edad y posición** junto al nombre en la bolsa,
+  además de la valoración que ya mostraba.

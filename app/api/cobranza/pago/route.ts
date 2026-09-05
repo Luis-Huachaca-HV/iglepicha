@@ -30,9 +30,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "La cobranza está bloqueada mientras la jornada está en curso" }, { status: 400 });
   }
 
-  const puedeMarcarAOtros = ["admin", "super_admin", "capitan"].includes(sesion.rol_sistema);
-  if (!puedeMarcarAOtros && sesion.id_usuario !== id_usuario) {
-    return NextResponse.json({ error: "Solo puedes marcar tu propio pago" }, { status: 403 });
+  if (!["admin", "super_admin", "capitan"].includes(sesion.rol_sistema)) {
+    return NextResponse.json({ error: "Solo el capitán o un admin pueden marcar el pago" }, { status: 403 });
+  }
+
+  const { data: actual } = await admin
+    .from("asistencia_draft")
+    .select("pago_realizado")
+    .eq("id_jornada", id_jornada)
+    .eq("id_usuario", id_usuario)
+    .maybeSingle();
+  if (actual?.pago_realizado && !pago_realizado) {
+    return NextResponse.json({ error: "Ya estaba marcado como pagado — no se puede deshacer" }, { status: 400 });
   }
 
   const { data, error } = await admin

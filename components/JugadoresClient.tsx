@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import { RadarChart } from "@/components/RadarChart";
+import { RadarChart, ETIQUETAS } from "@/components/RadarChart";
 import { Toast } from "@/components/Toast";
 import { useUsuarios } from "@/lib/useUsuarios";
 import { useToast } from "@/lib/useToast";
-import type { AsistenciaDraft, EquipoJornada, Jornada, RolSistema, SesionUsuario } from "@/lib/types";
+import type { AsistenciaDraft, EquipoJornada, Jornada, Posicion, RolSistema, SesionUsuario } from "@/lib/types";
+
+const POSICIONES: Posicion[] = ["POR", "DEF", "MC", "DEL"];
 
 type FiltroEdad = "todos" | "menor18" | "18a29" | "30mas";
 
@@ -41,6 +43,8 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
   const [errorNuevo, setErrorNuevo] = useState<string | null>(null);
   const [guardandoNuevo, setGuardandoNuevo] = useState(false);
   const { mensaje: mensajeToast, mostrarToast } = useToast();
+  const [editandoValoracion, setEditandoValoracion] = useState(false);
+  const [statsEdit, setStatsEdit] = useState<Record<string, number>>({});
 
   const puedeMarcarAOtros = ["admin", "super_admin", "capitan"].includes(sesion.rol_sistema);
   const esAdmin = sesion.rol_sistema === "admin" || sesion.rol_sistema === "super_admin";
@@ -150,6 +154,53 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
     return `Equipo de ${usuarios.find((u) => u.id_usuario === e.id_capitan)?.nombre ?? "?"}`;
   }
 
+  async function asignarPosicion(idUsuario: string, posicion: string) {
+    await fetch("/api/usuarios/posicion", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_usuario: idUsuario, posicion }),
+    });
+    recargarUsuarios();
+  }
+
+  function abrirEditorValoracion(idUsuario: string) {
+    const base = valoraciones[idUsuario] ?? {};
+    const inicial: Record<string, number> = {};
+    ETIQUETAS.forEach((e) => (inicial[e.clave] = Math.round(base[e.clave] ?? 5)));
+    setStatsEdit(inicial);
+    setEditandoValoracion(true);
+  }
+
+  async function guardarValoracion(idUsuario: string) {
+    await fetch("/api/valoraciones", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_evaluado: idUsuario, stats: statsEdit }),
+    });
+    setEditandoValoracion(false);
+    mostrarToast("✓ Valoración guardada");
+    if (jornada) {
+      supabase
+        .from("valoraciones")
+        .select("id_evaluado, stats")
+        .then(({ data }) => {
+          const acumulado: Record<string, { suma: Record<string, number>; n: number }> = {};
+          (data || []).forEach((v) => {
+            const entry = (acumulado[v.id_evaluado] ??= { suma: {}, n: 0 });
+            entry.n += 1;
+            Object.entries(v.stats as Record<string, number>).forEach(([k, val]) => {
+              entry.suma[k] = (entry.suma[k] ?? 0) + val;
+            });
+          });
+          const promedios: Record<string, Record<string, number>> = {};
+          Object.entries(acumulado).forEach(([id, { suma, n }]) => {
+            promedios[id] = Object.fromEntries(Object.entries(suma).map(([k, v]) => [k, v / n]));
+          });
+          setValoraciones(promedios);
+        });
+    }
+  }
+
   async function crearJugador() {
     if (!nuevoNombre.trim()) {
       setErrorNuevo("Ponle un nombre");
@@ -235,14 +286,15 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
           const bloqueadoQuitar = presente && enEquipo;
           return (
             <li key={u.id_usuario} className="flex items-center justify-between py-2">
-              <button className="flex flex-1 items-center gap-3 py-1.5 text-left" onClick={() => setSeleccionado(u.id_usuario)}>
+              <button className="flex flex-1 items-center gap-3 py-1.5 text-left" onClick={() => { setSeleccionado(u.id_usuario); setEditandoValoracion(false); }}>
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-pitch-800 font-display text-sm font-bold">
                   {u.nombre.charAt(0).toUpperCase()}
                 </span>
                 <span>
                   <span className="block text-sm font-medium">{u.nombre}</span>
                   <span className="block text-xs text-mist">
-                    {u.edad ? `${u.edad} años` : "Edad no registrada"} · {nombreEquipo(asistencias[u.id_usuario]?.id_equipo)}
+                    {u.edad ? `${u.edad} años` : "Edad no registrada"}
+                    {u.posicion ? ` · ${u.posicion}` : ""} · {nombreEquipo(asistencias[u.id_usuario]?.id_equipo)}
                   </span>
                 </span>
               </button>
@@ -263,7 +315,7 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
       </ul>
 
       {jugadorSeleccionado && (
-        <div className="fixed inset-0 z-20 flex items-end justify-center bg-pitch-950/80 backdrop-blur-sm" onClick={() => setSeleccionado(null)}>
+        <div className="fixed inset-0 z-20 flex items-end justify-center bg-pitch-950/80 backdrop-blur-sm" onClick={() => { setSeleccionado(null); setEditandoValoracion(false); }}>
           <div
             className="w-full max-w-md rounded-t-2xl border-t border-pitch-700 bg-pitch-900 p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
             onClick={(e) => e.stopPropagation()}
@@ -271,10 +323,71 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
             <h2 className="font-display text-xl font-bold">{jugadorSeleccionado.nombre}</h2>
             <p className="mb-4 text-sm text-mist">
               {jugadorSeleccionado.edad ? `${jugadorSeleccionado.edad} años` : "Edad no registrada"}
+              {jugadorSeleccionado.posicion ? ` · ${jugadorSeleccionado.posicion}` : ""}
             </p>
+
+            {esAdmin && (
+              <div className="mb-4 flex gap-2">
+                {POSICIONES.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => asignarPosicion(jugadorSeleccionado.id_usuario, p)}
+                    className={`flex-1 rounded-pill py-2 text-xs font-bold ${
+                      jugadorSeleccionado.posicion === p ? "bg-turf-500 text-pitch-950" : "border border-pitch-700 text-mist"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="flex justify-center">
               <RadarChart valores={valoraciones[jugadorSeleccionado.id_usuario] ?? null} />
             </div>
+
+            {(esAdmin || esCapitan) && !editandoValoracion && (
+              <button
+                onClick={() => abrirEditorValoracion(jugadorSeleccionado.id_usuario)}
+                className="mt-3 w-full rounded-pill border border-dashed border-turf-500 py-2.5 text-sm text-turf-400"
+              >
+                {valoraciones[jugadorSeleccionado.id_usuario] ? "Editar valoración" : "Poner valoración"}
+              </button>
+            )}
+
+            {editandoValoracion && (
+              <div className="mt-3 flex flex-col gap-2 rounded border border-pitch-800 bg-pitch-950 p-3">
+                {ETIQUETAS.map((atributo) => (
+                  <label key={atributo.clave} className="flex items-center justify-between text-sm">
+                    {atributo.label}
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={statsEdit[atributo.clave] ?? 5}
+                      onChange={(e) =>
+                        setStatsEdit((prev) => ({ ...prev, [atributo.clave]: Number(e.target.value) }))
+                      }
+                      className="w-16 rounded border border-pitch-700 bg-pitch-900 px-2 py-1.5 text-center"
+                    />
+                  </label>
+                ))}
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={() => setEditandoValoracion(false)}
+                    className="flex-1 rounded-pill border border-pitch-700 py-2.5 text-sm"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => guardarValoracion(jugadorSeleccionado.id_usuario)}
+                    className="flex-1 rounded-pill bg-turf-500 py-2.5 text-sm font-bold text-pitch-950"
+                  >
+                    Guardar
+                  </button>
+                </div>
+              </div>
+            )}
 
             {(esAdmin || esCapitan) && (
               <div className="mt-4 border-t border-pitch-800 pt-4">
@@ -312,7 +425,7 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
               </div>
             )}
 
-            <button onClick={() => setSeleccionado(null)} className="mt-4 w-full rounded-pill border border-pitch-700 py-3 text-sm">
+            <button onClick={() => { setSeleccionado(null); setEditandoValoracion(false); }} className="mt-4 w-full rounded-pill border border-pitch-700 py-3 text-sm">
               Cerrar
             </button>
           </div>
