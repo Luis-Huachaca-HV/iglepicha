@@ -29,6 +29,31 @@ export async function POST(req: NextRequest) {
   }
 
   const admin = supabaseAdmin();
+
+  if (rol_sistema !== "capitan") {
+    const { data: jornadaActiva } = await admin
+      .from("jornadas")
+      .select("id_jornada")
+      .neq("estado", "finalizada")
+      .order("creado_en", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (jornadaActiva) {
+      const { data: equipoQueCapitanea } = await admin
+        .from("equipos_jornada")
+        .select("id_equipo")
+        .eq("id_jornada", jornadaActiva.id_jornada)
+        .eq("id_capitan", id_usuario)
+        .maybeSingle();
+      if (equipoQueCapitanea) {
+        return NextResponse.json(
+          { error: "Sigue capitaneando un equipo en la jornada actual — sácalo de ahí primero desde Jugadores/Draft." },
+          { status: 400 }
+        );
+      }
+    }
+  }
+
   const { error } = await admin.from("usuarios").update({ rol_sistema }).eq("id_usuario", id_usuario);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });

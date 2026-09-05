@@ -98,11 +98,17 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
   }
 
   async function cambiarRol(idUsuario: string, rol: RolSistema) {
-    await fetch("/api/usuarios/rol", {
+    const res = await fetch("/api/usuarios/rol", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id_usuario: idUsuario, rol_sistema: rol }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      mostrarToast(data.error ?? "No se pudo cambiar el rol");
+      recargarUsuarios();
+      return;
+    }
     recargarUsuarios();
   }
 

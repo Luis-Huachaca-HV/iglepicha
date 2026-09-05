@@ -339,3 +339,14 @@ usa el mismo camino que ya sabíamos que funciona bien.
   duplicado que haya quedado (conservando la que tiene el draft real) y
   agrega un candado a nivel de base de datos para que nunca puedan existir
   dos jornadas activas a la vez.
+
+## Corrección: cambiar el rol de un capitán rompía el draft
+
+Configuraciones dejaba cambiarle el rol a cualquiera, incluido un capitán
+activo — pero eso solo tocaba su rol de sistema, sin sacarlo de ser
+`id_capitan` del equipo en la jornada actual. El resultado: Config decía
+"jugador" pero el Draft lo seguía mostrando como capitán, todo
+desincronizado. Ahora ese cambio de rol se **bloquea con un mensaje claro**
+mientras la persona siga capitaneando un equipo en la jornada activa — hay
+que sacarlo del equipo desde Jugadores/Draft primero. Si necesitas poder
+reemplazar a un capitán por otro directamente, dímelo y agrego ese botón.
