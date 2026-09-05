@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { esPinHashValido } from "@/lib/pin-formato";
 import type { RolSistema } from "@/lib/types";
 
 export interface UsuarioLista {
@@ -9,20 +10,31 @@ export interface UsuarioLista {
   nombre: string;
   edad: number | null;
   rol_sistema: RolSistema;
-  tiene_pin?: boolean;
+  tiene_pin: boolean;
 }
 
-// Hook compartido: carga /api/usuarios y se mantiene al día solo, sin
-// necesidad de refrescar la página, en cuanto alguien agrega/edita un
-// usuario desde cualquier pantalla (Jugadores, Configuraciones, etc.)
+// Hook compartido para la lista de usuarios. Lee DIRECTO de Supabase desde
+// el navegador (igual que equipos/asistencia/partidos en el resto de la
+// app) en vez de pasar por una ruta de Next.js — así evitamos cualquier
+// capa extra de caché de Next/Vercel que pueda quedarse con una versión
+// vieja. Se mantiene al día solo vía Realtime.
 export function useUsuarios() {
   const [usuarios, setUsuarios] = useState<UsuarioLista[]>([]);
 
-  const recargarUsuarios = useCallback(() => {
-    fetch(`/api/usuarios?_=${Date.now()}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => setUsuarios(d.usuarios ?? []))
-      .catch(() => {});
+  const recargarUsuarios = useCallback(async () => {
+    const { data } = await supabase
+      .from("usuarios")
+      .select("id_usuario, nombre, edad, rol_sistema, pin_hash")
+      .order("nombre", { ascending: true });
+    setUsuarios(
+      (data || []).map((u) => ({
+        id_usuario: u.id_usuario,
+        nombre: u.nombre,
+        edad: u.edad,
+        rol_sistema: u.rol_sistema,
+        tiene_pin: esPinHashValido(u.pin_hash),
+      }))
+    );
   }, []);
 
   useEffect(() => {

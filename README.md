@@ -302,3 +302,18 @@ tenía guardado de antes de este fix: en el iPhone, ve a Ajustes → Safari
 → "Borrar historial y datos de sitios web" (o, más simple, abre la app en
 una pestaña de Navegación Privada para probar). Después de eso, con este
 fix instalado, no debería volver a necesitarse.
+
+## Corrección definitiva: la lista de jugadores no se actualizaba
+
+La causa real: de todos los datos de la app (equipos, asistencia,
+partidos, cobranza), la lista de **usuarios** era la única que pasaba por
+una ruta intermedia de Next.js (`/api/usuarios`) en vez de leerse directo
+de Supabase desde el navegador — y esa capa de más es la que venía dando
+problemas de caché una y otra vez, sin importar cuántos `no-store` le
+pusiéramos.
+
+Ahora `lib/useUsuarios.ts` lee **directo de Supabase**, exactamente igual
+que Draft, Partidos, Cobranza y asistencia (que nunca tuvieron este
+problema). Ya no depende de ninguna ruta de Next.js ni de configuración de
+caché — un jugador nuevo aparece al toque, en cualquier pantalla, porque
+usa el mismo camino que ya sabíamos que funciona bien.
