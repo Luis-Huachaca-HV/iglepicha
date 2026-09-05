@@ -43,10 +43,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Equipo no encontrado" }, { status: 404 });
   }
 
-  const esAdmin = sesion.rol_sistema === "admin" || sesion.rol_sistema === "super_admin";
-  const esCapitanDeTurno = sesion.rol_sistema === "capitan" && sesion.id_usuario === equipoTurno.id_capitan;
-  if (!esAdmin && !esCapitanDeTurno) {
-    return NextResponse.json({ error: "Solo el capitán en turno o un admin pueden elegir" }, { status: 403 });
+  const esSuperAdmin = sesion.rol_sistema === "super_admin";
+  const esCapitanDeTurno = sesion.id_usuario === equipoTurno.id_capitan;
+  if (!esSuperAdmin && !esCapitanDeTurno) {
+    return NextResponse.json({ error: "Solo el capitán en turno puede elegir" }, { status: 403 });
   }
 
   const { data: asistenciaJugador } = await admin

@@ -186,7 +186,8 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
   if (!jornada) return <p className="text-mist">Cargando…</p>;
 
   const equipoEnTurno = equipos.find((e) => e.id_equipo === jornada.draft_turno_equipo_id) || null;
-  const esMiTurno = esAdmin || (sesion.rol_sistema === "capitan" && equipoEnTurno?.id_capitan === sesion.id_usuario);
+  const esSuperAdmin = sesion.rol_sistema === "super_admin";
+  const esMiTurno = esSuperAdmin || equipoEnTurno?.id_capitan === sesion.id_usuario;
 
   // ---------- Sin equipos suficientes ----------
   if (equipos.length < 2) {
@@ -323,7 +324,7 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
           </ul>
           {!esMiTurno && (
             <p className="mt-2 text-xs text-mist">
-              Solo {usuariosMap[equipoEnTurno?.id_capitan ?? ""]?.nombre ?? "el capitán en turno"} o un admin pueden elegir ahora.
+              Solo {usuariosMap[equipoEnTurno?.id_capitan ?? ""]?.nombre ?? "el capitán en turno"} puede elegir ahora.
             </p>
           )}
         </div>

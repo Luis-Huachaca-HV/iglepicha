@@ -40,6 +40,15 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Sube de rol a "capitan" a quien todavía era un jugador normal, para
+  // que en su próximo login vea la pestaña Draft. Nunca degrada a un
+  // admin/super_admin que haya sido elegido capitán.
+  await admin
+    .from("usuarios")
+    .update({ rol_sistema: "capitan" })
+    .in("id_usuario", capitanes)
+    .eq("rol_sistema", "jugador_registrado");
+
   const { data: equipos } = await admin.from("equipos_jornada").select("*").eq("id_jornada", id_jornada);
   return NextResponse.json({ equipos });
 }

@@ -36,6 +36,18 @@ export async function GET() {
     .single();
 
   if (insertError) {
+    // Choque contra el índice único "una_jornada_no_finalizada": otra
+    // pantalla ganó la carrera y ya creó la jornada un instante antes.
+    // No es un error real — simplemente leemos la que quedó creada.
+    const { data: existenteTrasChoque } = await admin
+      .from("jornadas")
+      .select("*")
+      .order("creado_en", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existenteTrasChoque) {
+      return NextResponse.json({ jornada: existenteTrasChoque });
+    }
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
   return NextResponse.json({ jornada: nueva });

@@ -317,3 +317,25 @@ que Draft, Partidos, Cobranza y asistencia (que nunca tuvieron este
 problema). Ya no depende de ninguna ruta de Next.js ni de configuración de
 caché — un jugador nuevo aparece al toque, en cualquier pantalla, porque
 usa el mismo camino que ya sabíamos que funciona bien.
+
+## Correcciones: capitanes, permisos del draft, y el "reinicio" fantasma
+
+- **Capitán no veía Draft**: al elegir capitanes en Jugadores, ahora
+  también se les sube el rol a `capitan` en el sistema (antes solo se
+  anotaba en el equipo, sin tocar su rol). La próxima vez que ese jugador
+  entra, ya ve Draft, Partidos y Cobranza. Nunca degrada a alguien que ya
+  era admin/super_admin.
+- **El admin ya no puede elegir en el draft**: durante el draft en curso,
+  solo puede elegir el capitán del equipo en turno (el super_admin
+  conserva un permiso de respaldo por si hay que destrabar algo). El
+  admin normal participa en el setup (cupos, iniciar draft) y en activar
+  el mercado de pases al final — no en las elecciones en sí.
+- **"El draft se reinicia" al agregar un jugador**: la causa real era que,
+  si dos pantallas consultaban al mismo tiempo cuando todavía no existía
+  ninguna jornada, cada una podía crear la suya — dejando dos jornadas
+  "activas" en la base de datos. La pantalla que terminaba mostrando la
+  jornada vieja (recién creada, sin draft) parecía haberse reiniciado.
+  `supabase/migrations/007_una_jornada_activa.sql` limpia cualquier
+  duplicado que haya quedado (conservando la que tiene el draft real) y
+  agrega un candado a nivel de base de datos para que nunca puedan existir
+  dos jornadas activas a la vez.
