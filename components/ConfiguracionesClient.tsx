@@ -27,8 +27,19 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
   const [rolNuevo, setRolNuevo] = useState<RolSistema>("jugador_registrado");
   const [mensajeUsuario, setMensajeUsuario] = useState<string | null>(null);
   const { mensaje: mensajeToast, mostrarToast } = useToast();
+  const [confirmarReset, setConfirmarReset] = useState(false);
+  const [reseteando, setReseteando] = useState(false);
 
   const esSuperAdmin = sesion.rol_sistema === "super_admin";
+
+  async function hardReset() {
+    setReseteando(true);
+    const res = await fetch("/api/jornada/hard-reset", { method: "POST", cache: "no-store" });
+    setReseteando(false);
+    setConfirmarReset(false);
+    if (res.ok) mostrarToast("✓ Todo reiniciado — jugadores intactos");
+    else mostrarToast("No se pudo reiniciar");
+  }
 
   useEffect(() => {
     fetch("/api/jornada/active", { cache: "no-store" })
@@ -258,6 +269,45 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
           ))}
         </ul>
       </section>
+
+      {/* Reinicio total (zona de peligro) */}
+      <section className="rounded border border-card-red bg-pitch-900 p-4">
+        <h2 className="mb-1 font-display text-lg font-bold text-card-red">Reinicio total</h2>
+        <p className="mb-3 text-xs text-mist">
+          Borra la jornada actual completa: asistencia, equipos, capitanes, draft, partidos y cobranza — y arranca una
+          en blanco. Los jugadores (usuarios) nunca se tocan. Úsalo solo si algo quedó atascado por un bug.
+        </p>
+        <button
+          onClick={() => setConfirmarReset(true)}
+          className="w-full rounded-pill border border-card-red py-3 text-sm font-bold text-card-red"
+        >
+          Reiniciar todo
+        </button>
+      </section>
+
+      {confirmarReset && (
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-pitch-950/80 p-6 backdrop-blur-sm" onClick={() => setConfirmarReset(false)}>
+          <div className="w-full max-w-sm rounded-2xl border border-card-red bg-pitch-900 p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <p className="mb-2 font-display text-xl font-bold text-card-red">¿Reiniciar todo?</p>
+            <p className="mb-6 text-sm text-mist">
+              Se borra asistencia, equipos, capitanes, draft, partidos y cobranza de la jornada actual. Los jugadores
+              quedan intactos. No se puede deshacer.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmarReset(false)} className="flex-1 rounded-pill border border-pitch-700 py-3 text-sm">
+                Cancelar
+              </button>
+              <button
+                onClick={hardReset}
+                disabled={reseteando}
+                className="flex-1 rounded-pill bg-card-red py-3 text-sm font-bold text-chalk disabled:opacity-50"
+              >
+                {reseteando ? "Reiniciando…" : "Sí, reiniciar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

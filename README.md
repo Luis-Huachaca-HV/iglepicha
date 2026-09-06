@@ -388,3 +388,13 @@ reemplazar a un capitán por otro directamente, dímelo y agrego ese botón.
   un sistema de votos entre todos.
 - El Draft ahora muestra **edad y posición** junto al nombre en la bolsa,
   además de la valoración que ya mostraba.
+
+## Botón de reinicio total (zona de peligro en Configuraciones)
+
+Nuevo botón "Reiniciar todo" en Configuraciones (solo admin/super_admin),
+con confirmación. Borra la jornada actual completa —asistencia, equipos,
+capitanes, draft, partidos, cobranza— y arranca una en blanco, sin tocar
+nunca la tabla de usuarios. Es el mismo efecto que correr
+`reset-jornadas.sql` a mano en Supabase, pero como botón dentro de la app,
+para cuando algo quede atascado por un bug y no quieras depender de
+Supabase para destrabarlo.
