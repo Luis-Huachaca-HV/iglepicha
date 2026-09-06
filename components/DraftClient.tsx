@@ -35,13 +35,17 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
     setAsistencias((asis as AsistenciaDraft[]) || []);
   }, []);
 
-  useEffect(() => {
+  const cargarJornada = useCallback(() => {
     fetch("/api/jornada/active", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         setJornada(d.jornada);
         if (d.jornada) cargarTodo(d.jornada.id_jornada);
       });
+  }, [cargarTodo]);
+
+  useEffect(() => {
+    cargarJornada();
     supabase
       .from("valoraciones")
       .select("id_evaluado, stats")
@@ -61,7 +65,25 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
         });
         setRatings(generales);
       });
-  }, [cargarTodo]);
+  }, [cargarJornada]);
+
+  // Red de seguridad: Realtime a veces se cae solo en redes de celular
+  // (pantalla bloqueada, señal débil). Sin esto, si el WebSocket se cae,
+  // la pantalla se queda pegada hasta que alguien la recargue a mano.
+  // Con esto, se autocorrige sola cada pocos segundos o al volver a la app.
+  useEffect(() => {
+    const id = setInterval(cargarJornada, 5000);
+    function alVolver() {
+      if (document.visibilityState === "visible") cargarJornada();
+    }
+    document.addEventListener("visibilitychange", alVolver);
+    window.addEventListener("focus", alVolver);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", alVolver);
+      window.removeEventListener("focus", alVolver);
+    };
+  }, [cargarJornada]);
 
   useEffect(() => {
     if (!jornada) return;

@@ -54,7 +54,7 @@ export function PartidosClient({ sesion }: { sesion: SesionUsuario }) {
     if (data.partido) setDuracionMin(Math.round(data.partido.duracion_seg / 60));
   }, []);
 
-  useEffect(() => {
+  const cargarJornada = useCallback(() => {
     fetch("/api/jornada/active", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
@@ -65,6 +65,26 @@ export function PartidosClient({ sesion }: { sesion: SesionUsuario }) {
         }
       });
   }, [cargarEquiposYAsistencias, cargarPartidoActivo]);
+
+  useEffect(() => {
+    cargarJornada();
+  }, [cargarJornada]);
+
+  // Red de seguridad si Realtime se cae (redes de celular, pantalla
+  // bloqueada): reintenta solo cada pocos segundos o al volver a la app.
+  useEffect(() => {
+    const id = setInterval(cargarJornada, 5000);
+    function alVolver() {
+      if (document.visibilityState === "visible") cargarJornada();
+    }
+    document.addEventListener("visibilitychange", alVolver);
+    window.addEventListener("focus", alVolver);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", alVolver);
+      window.removeEventListener("focus", alVolver);
+    };
+  }, [cargarJornada]);
 
   // Realtime: cualquier cambio en partidos/equipos de esta jornada refresca todo
   useEffect(() => {

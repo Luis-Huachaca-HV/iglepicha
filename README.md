@@ -398,3 +398,25 @@ nunca la tabla de usuarios. Es el mismo efecto que correr
 `reset-jornadas.sql` a mano en Supabase, pero como botón dentro de la app,
 para cuando algo quede atascado por un bug y no quieras depender de
 Supabase para destrabarlo.
+
+## Corrección importante: pantallas que no se enteraban de cambios de otro dispositivo
+
+Un capitán en su celular podía quedarse viendo "esperando a que el admin
+inicie el draft" aunque el admin ya lo hubiera iniciado desde otro
+dispositivo. La causa: en redes de celular (señal débil, pantalla
+bloqueada), la conexión en vivo de Supabase (Realtime) se puede caer sola
+sin avisar — y sin un plan B, la pantalla se queda pegada hasta que
+alguien la recarga a mano.
+
+Ahora Draft, Partidos, Jugadores y Cobranza tienen un respaldo: además de
+Realtime, cada una vuelve a consultar el estado real cada 5 segundos y
+también apenas la app vuelve a primer plano (cambias de app y regresas,
+desbloqueas el celular). Así, aunque la conexión en vivo se corte, la
+pantalla se autocorrige sola en segundos — nunca hace falta recargar la
+página ni tocar nada de caché.
+
+## Confirmación al marcar asistencia
+
+Marcar o quitar la asistencia de alguien en Jugadores ahora pide
+confirmación ("¿Confirmas que llegó [nombre]?" / "¿Quitar la asistencia de
+[nombre]?") antes de aplicar el cambio, para evitar un mal click.

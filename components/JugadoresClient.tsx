@@ -45,6 +45,7 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
   const { mensaje: mensajeToast, mostrarToast } = useToast();
   const [editandoValoracion, setEditandoValoracion] = useState(false);
   const [statsEdit, setStatsEdit] = useState<Record<string, number>>({});
+  const [confirmarAsistencia, setConfirmarAsistencia] = useState<{ id_usuario: string; nombre: string; presente: boolean } | null>(null);
 
   const puedeMarcarAOtros = ["admin", "super_admin", "capitan"].includes(sesion.rol_sistema);
   const esAdmin = sesion.rol_sistema === "admin" || sesion.rol_sistema === "super_admin";
@@ -62,13 +63,17 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
     setEquipos((eq as EquipoJornada[]) || []);
   }, []);
 
-  useEffect(() => {
+  const cargarJornada = useCallback(() => {
     fetch("/api/jornada/active", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         setJornada(d.jornada);
         if (d.jornada) cargarAsistenciasYEquipos(d.jornada.id_jornada);
       });
+  }, [cargarAsistenciasYEquipos]);
+
+  useEffect(() => {
+    cargarJornada();
     supabase
       .from("valoraciones")
       .select("id_evaluado, stats")
@@ -87,7 +92,23 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
         });
         setValoraciones(promedios);
       });
-  }, [cargarAsistenciasYEquipos]);
+  }, [cargarJornada]);
+
+  // Red de seguridad si Realtime se cae (redes de celular, pantalla
+  // bloqueada): reintenta solo cada pocos segundos o al volver a la app.
+  useEffect(() => {
+    const id = setInterval(cargarJornada, 5000);
+    function alVolver() {
+      if (document.visibilityState === "visible") cargarJornada();
+    }
+    document.addEventListener("visibilitychange", alVolver);
+    window.addEventListener("focus", alVolver);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", alVolver);
+      window.removeEventListener("focus", alVolver);
+    };
+  }, [cargarJornada]);
 
   useEffect(() => {
     if (!jornada) return;
@@ -300,7 +321,9 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
               </button>
               <button
                 disabled={(!puedeMarcarAOtros && sesion.id_usuario !== u.id_usuario) || bloqueadoQuitar}
-                onClick={() => marcar(u.id_usuario, !presente)}
+                onClick={() =>
+                  setConfirmarAsistencia({ id_usuario: u.id_usuario, nombre: u.nombre, presente: !presente })
+                }
                 title={bloqueadoQuitar ? "Ya está en un equipo del draft — no se puede quitar" : undefined}
                 className={`flex h-11 w-11 shrink-0 items-center justify-center rounded border-2 transition ${
                   presente ? "border-turf-500 bg-turf-500" : "border-pitch-700 bg-transparent"
@@ -520,6 +543,34 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
             >
               Confirmar equipos
             </button>
+          </div>
+        </div>
+      )}
+
+      {confirmarAsistencia && (
+        <div
+          className="fixed inset-0 z-20 flex items-center justify-center bg-pitch-950/80 p-6 backdrop-blur-sm"
+          onClick={() => setConfirmarAsistencia(null)}
+        >
+          <div className="w-full max-w-sm rounded-2xl border border-pitch-700 bg-pitch-900 p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <p className="mb-1 text-sm text-mist">
+              {confirmarAsistencia.presente ? "¿Confirmas que llegó" : "¿Quitar la asistencia de"}
+            </p>
+            <p className="mb-6 font-display text-xl font-bold">{confirmarAsistencia.nombre}?</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmarAsistencia(null)} className="flex-1 rounded-pill border border-pitch-700 py-3 text-sm">
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  marcar(confirmarAsistencia.id_usuario, confirmarAsistencia.presente);
+                  setConfirmarAsistencia(null);
+                }}
+                className="flex-1 rounded-pill bg-turf-500 py-3 text-sm font-bold text-pitch-950"
+              >
+                Confirmar
+              </button>
+            </div>
           </div>
         </div>
       )}

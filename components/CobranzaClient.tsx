@@ -32,6 +32,15 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
     setAsistencias((asis as AsistenciaDraft[]) || []);
   }, []);
 
+  const cargarJornada = useCallback(() => {
+    fetch("/api/jornada/active", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        setJornada(d.jornada);
+        if (d.jornada) cargarEquiposYAsistencias(d.jornada.id_jornada);
+      });
+  }, [cargarEquiposYAsistencias]);
+
   useEffect(() => {
     fetch("/api/jornada/active", { cache: "no-store" })
       .then((r) => r.json())
@@ -43,6 +52,23 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
         }
       });
   }, [cargarEquiposYAsistencias]);
+
+  // Red de seguridad si Realtime se cae (redes de celular, pantalla
+  // bloqueada). No toca costoInput para no pisar lo que el admin esté
+  // escribiendo — solo refresca jornada/equipos/asistencias.
+  useEffect(() => {
+    const id = setInterval(cargarJornada, 5000);
+    function alVolver() {
+      if (document.visibilityState === "visible") cargarJornada();
+    }
+    document.addEventListener("visibilitychange", alVolver);
+    window.addEventListener("focus", alVolver);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", alVolver);
+      window.removeEventListener("focus", alVolver);
+    };
+  }, [cargarJornada]);
 
   useEffect(() => {
     if (!jornada) return;
