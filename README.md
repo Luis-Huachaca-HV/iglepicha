@@ -420,3 +420,14 @@ página ni tocar nada de caché.
 Marcar o quitar la asistencia de alguien en Jugadores ahora pide
 confirmación ("¿Confirmas que llegó [nombre]?" / "¿Quitar la asistencia de
 [nombre]?") antes de aplicar el cambio, para evitar un mal click.
+
+## Corrección definitiva: "PIN incorrecto" al verificar (no al crear)
+
+Bug real de código, no de caché ni de dispositivos. Al **verificar** un
+PIN ya creado, la app tenía un error clásico de React: por cómo estaba
+armado el `setTimeout` que dispara el envío, el último dígito tecleado a
+veces no llegaba a viajar en la verificación — así que el PIN correcto
+podía fallar siempre, en cualquier dispositivo. Por eso funcionaba la
+primera vez (al crear el PIN es un mecanismo distinto) pero fallaba
+después al querer usarlo. Ya corregido: ahora se envía exactamente el PIN
+recién tecleado, completo.

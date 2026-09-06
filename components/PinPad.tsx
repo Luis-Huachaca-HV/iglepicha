@@ -39,8 +39,15 @@ export function PinPad({ titulo, subtitulo, confirmar, onSubmit, error, cargando
     if (siguiente.length === 4) {
       if (confirmar && fase === "pin") {
         setTimeout(() => setFase("confirmar"), 150);
-      } else {
+      } else if (confirmar) {
+        // Ronda 2 (confirmar): "pin" (ronda 1) ya está asentado hace rato, sin riesgo de quedar viejo.
         setTimeout(() => onSubmit(pin, siguiente), 150);
+      } else {
+        // Verificar un PIN existente: "siguiente" ES el PIN recién completado.
+        // Usarlo directo — el estado "pin" puede quedar un dígito atrasado
+        // dentro de este cierre de setTimeout, y eso hacía fallar SIEMPRE
+        // la verificación (aunque el PIN tecleado fuera el correcto).
+        setTimeout(() => onSubmit(siguiente), 150);
       }
     }
   }
