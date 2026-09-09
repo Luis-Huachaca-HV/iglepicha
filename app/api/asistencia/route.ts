@@ -32,6 +32,14 @@ export async function POST(req: NextRequest) {
 
   const admin = supabaseAdmin();
 
+  const { data: jornada } = await admin.from("jornadas").select("estado").eq("id_jornada", id_jornada).single();
+  if (jornada?.estado === "en_curso") {
+    return NextResponse.json(
+      { error: "La asistencia está bloqueada — la jornada ya está en curso." },
+      { status: 400 }
+    );
+  }
+
   if (!presente) {
     const { data: actual } = await admin
       .from("asistencia_draft")

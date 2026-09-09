@@ -447,3 +447,27 @@ jornada real al instante, en vez de mostrar el error técnico. Sigue siendo
 buena idea evitar tocar "Reiniciar todo" mientras otro dispositivo está
 activamente marcando asistencia o en medio del draft — pero si pasa, ya no
 se rompe de forma confusa.
+
+## Corrección importante: el sondeo de respaldo podía "vaciar" la pantalla
+
+Esta era probablemente la causa real de "no se puede iniciar la jornada o
+el draft, se reinicia solo": el sondeo automático cada 5s (agregado para
+que Realtime tenga un respaldo) hacía `setJornada(d.jornada)` sin fijarse
+si esa respuesta era válida. Si esa consulta puntual fallaba o venía
+vacía por cualquier motivo (una red lenta, un límite de conexiones), la
+pantalla se quedaba en blanco/cargando de la nada — como si todo se
+hubiera reiniciado, sin que en realidad se haya tocado nada en la base de
+datos. Ahora ese sondeo **nunca pisa una pantalla buena con una respuesta
+fallida o vacía** — si algo sale mal, simplemente lo ignora y reintenta
+en el siguiente ciclo.
+
+## Asistencia bloqueada una vez iniciada la jornada
+
+Antes se podía seguir marcando presentes y agregando jugadores en
+cualquier momento. Ahora, en cuanto el admin toca "Iniciar jornada" en el
+Dashboard, la pestaña Jugadores muestra "🔒 Asistencia bloqueada — la
+jornada ya está en curso" y no deja marcar/desmarcar a nadie ni agregar
+jugadores nuevos — el bloqueo se aplica tanto en pantalla como en el
+servidor. Mientras el draft está en curso (pero la jornada todavía no se
+inició desde el Dashboard), sigue estando todo abierto para poder sumar
+gente de último momento.

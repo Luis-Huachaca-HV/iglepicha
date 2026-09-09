@@ -33,11 +33,19 @@ export function DashboardClient({ sesion }: { sesion: SesionUsuario }) {
   }, []);
 
   const cargarJornadaActiva = useCallback(async () => {
-    const r = await fetch("/api/jornada/active", { cache: "no-store" });
-    const d = await r.json();
-    setJornada(d.jornada);
-    if (d.jornada) cargarConteos(d.jornada.id_jornada);
-    return d.jornada as Jornada | null;
+    try {
+      const r = await fetch("/api/jornada/active", { cache: "no-store" });
+      if (!r.ok) return null;
+      const d = await r.json();
+      if (!d.jornada) return null;
+      setJornada(d.jornada);
+      cargarConteos(d.jornada.id_jornada);
+      return d.jornada as Jornada;
+    } catch {
+      // Un sondeo fallido (red lenta, etc.) nunca debe borrar lo que ya
+      // se ve en pantalla — simplemente se ignora y se reintenta después.
+      return null;
+    }
   }, [cargarConteos]);
 
   useEffect(() => {

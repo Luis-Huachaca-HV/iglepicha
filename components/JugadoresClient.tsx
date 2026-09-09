@@ -50,6 +50,7 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
   const puedeMarcarAOtros = ["admin", "super_admin", "capitan"].includes(sesion.rol_sistema);
   const esAdmin = sesion.rol_sistema === "admin" || sesion.rol_sistema === "super_admin";
   const esCapitan = sesion.rol_sistema === "capitan";
+  const jornadaBloqueada = jornada?.estado === "en_curso";
   const miEquipo = equipos.find((e) => e.id_capitan === sesion.id_usuario) ?? null;
 
   const cargarAsistenciasYEquipos = useCallback(async (idJornada: string) => {
@@ -65,11 +66,13 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
 
   const cargarJornada = useCallback(() => {
     fetch("/api/jornada/active", { cache: "no-store" })
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
+        if (!d?.jornada) return; // sondeo fallido: nunca borrar lo que ya está en pantalla
         setJornada(d.jornada);
-        if (d.jornada) cargarAsistenciasYEquipos(d.jornada.id_jornada);
-      });
+        cargarAsistenciasYEquipos(d.jornada.id_jornada);
+      })
+      .catch(() => {});
   }, [cargarAsistenciasYEquipos]);
 
   useEffect(() => {
@@ -284,7 +287,13 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
         ))}
       </div>
 
-      {esAdmin && (
+      {jornadaBloqueada && (
+        <div className="rounded border border-dashed border-pitch-700 bg-pitch-900 px-4 py-3 text-center text-sm text-mist">
+          🔒 Asistencia bloqueada — la jornada ya está en curso.
+        </div>
+      )}
+
+      {esAdmin && !jornadaBloqueada && (
         <div className="flex gap-2">
           <button
             onClick={() => setModalNuevoJugador(true)}
@@ -321,7 +330,7 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
                 </span>
               </button>
               <button
-                disabled={(!puedeMarcarAOtros && sesion.id_usuario !== u.id_usuario) || bloqueadoQuitar}
+                disabled={jornadaBloqueada || (!puedeMarcarAOtros && sesion.id_usuario !== u.id_usuario) || bloqueadoQuitar}
                 onClick={() =>
                   setConfirmarAsistencia({ id_usuario: u.id_usuario, nombre: u.nombre, presente: !presente })
                 }

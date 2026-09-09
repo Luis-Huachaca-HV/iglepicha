@@ -34,11 +34,13 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
 
   const cargarJornada = useCallback(() => {
     fetch("/api/jornada/active", { cache: "no-store" })
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
+        if (!d?.jornada) return; // sondeo fallido: nunca borrar lo que ya está en pantalla
         setJornada(d.jornada);
-        if (d.jornada) cargarEquiposYAsistencias(d.jornada.id_jornada);
-      });
+        cargarEquiposYAsistencias(d.jornada.id_jornada);
+      })
+      .catch(() => {});
   }, [cargarEquiposYAsistencias]);
 
   useEffect(() => {

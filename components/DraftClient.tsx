@@ -37,11 +37,13 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
 
   const cargarJornada = useCallback(() => {
     fetch("/api/jornada/active", { cache: "no-store" })
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
+        if (!d?.jornada) return; // sondeo fallido: nunca borrar lo que ya está en pantalla
         setJornada(d.jornada);
-        if (d.jornada) cargarTodo(d.jornada.id_jornada);
-      });
+        cargarTodo(d.jornada.id_jornada);
+      })
+      .catch(() => {});
   }, [cargarTodo]);
 
   useEffect(() => {
