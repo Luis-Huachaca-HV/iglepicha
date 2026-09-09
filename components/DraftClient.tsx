@@ -179,7 +179,11 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
     const data = await res.json();
     setCargando(false);
     setCandidato(null);
-    if (!res.ok) return setError(data.error);
+    if (!res.ok) {
+      setError(data.error);
+      if (data.jornadaInvalida) cargarJornada();
+      return;
+    }
     setJornada(data.jornada);
   }
 

@@ -147,6 +147,7 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
       const data = await res.json().catch(() => ({}));
       setAsistencias((prev) => ({ ...prev, [idUsuario]: anterior as AsistenciaDraft }));
       mostrarToast(data.error ?? "No se pudo actualizar la asistencia");
+      if (data.jornadaInvalida) cargarJornada();
     }
   }
 

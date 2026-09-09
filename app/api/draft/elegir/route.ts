@@ -66,6 +66,12 @@ export async function POST(req: NextRequest) {
     .eq("id_jornada", id_jornada)
     .eq("id_usuario", id_usuario);
   if (asignarError) {
+    if (asignarError.code === "23503") {
+      return NextResponse.json(
+        { error: "Esta jornada ya no existe (alguien la reinició) — recarga para ver la actual.", jornadaInvalida: true },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: asignarError.message }, { status: 500 });
   }
 

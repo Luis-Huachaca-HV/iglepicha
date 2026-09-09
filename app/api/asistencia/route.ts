@@ -57,6 +57,12 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
+    if (error.code === "23503") {
+      return NextResponse.json(
+        { error: "Esta jornada ya no existe (alguien la reinició) — recarga la pantalla para ver la actual.", jornadaInvalida: true },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   return NextResponse.json({ asistencia: data });

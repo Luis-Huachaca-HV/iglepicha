@@ -431,3 +431,19 @@ podía fallar siempre, en cualquier dispositivo. Por eso funcionaba la
 primera vez (al crear el PIN es un mecanismo distinto) pero fallaba
 después al querer usarlo. Ya corregido: ahora se envía exactamente el PIN
 recién tecleado, completo.
+
+## Corrección: mensaje confuso cuando la jornada cambió mientras tenías la pantalla abierta
+
+Si en un dispositivo tocabas "Reiniciar todo" o "Comenzar jornada nueva"
+mientras otra pantalla (tuya u otra persona) seguía con la jornada vieja
+abierta, esa pantalla vieja podía mostrar un error crudo de base de datos
+("violates foreign key constraint...") al intentar marcar asistencia o
+elegir en el draft — o el draft parecía "prenderse y apagarse solo" (el
+aviso automático cada 5s detectaba la jornada nueva y la mostraba encima).
+
+Ahora, en ese caso, la app muestra un mensaje claro ("Esta jornada ya no
+existe — recarga para ver la actual") y **se resincroniza sola** con la
+jornada real al instante, en vez de mostrar el error técnico. Sigue siendo
+buena idea evitar tocar "Reiniciar todo" mientras otro dispositivo está
+activamente marcando asistencia o en medio del draft — pero si pasa, ya no
+se rompe de forma confusa.
