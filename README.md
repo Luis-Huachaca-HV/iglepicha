@@ -471,3 +471,19 @@ jugadores nuevos — el bloqueo se aplica tanto en pantalla como en el
 servidor. Mientras el draft está en curso (pero la jornada todavía no se
 inició desde el Dashboard), sigue estando todo abierto para poder sumar
 gente de último momento.
+
+## Corrección: la pantalla quedaba "congelada" al volver atrás en Safari
+
+Causa distinta a las anteriores: al usar el gesto de deslizar hacia atrás
+en Safari/iOS (o el botón atrás), el navegador a veces restaura una
+"foto" congelada de la página tal como estaba (con la jornada vieja en
+memoria) en vez de recargarla — esto se llama bfcache y ocurre por fuera
+de cualquier configuración de caché de Next.js o del servidor, es un
+comportamiento del navegador. Por eso podías reiniciar todo desde
+Configuraciones y, al volver a Jugadores con el gesto de atrás, seguir
+viendo (e interactuando con) la jornada que ya no existe.
+
+Ahora Dashboard, Jugadores, Draft, Partidos y Cobranza detectan
+específicamente ese caso (evento `pageshow` con `persisted`) y se
+resincronizan al instante apenas la página vuelve a mostrarse así,
+además de todos los demás respaldos que ya tenían.

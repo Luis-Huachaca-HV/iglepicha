@@ -62,9 +62,17 @@ export function DashboardClient({ sesion }: { sesion: SesionUsuario }) {
     }
     document.addEventListener("visibilitychange", alVolverAEnfocar);
     window.addEventListener("focus", alVolverAEnfocar);
+    // Safari/iOS a veces restaura la página "congelada" desde el gesto de
+    // volver atrás (bfcache) en vez de recargarla — sin esto, se queda con
+    // datos de una jornada que ya no existe.
+    function alRestaurarBfcache(e: PageTransitionEvent) {
+      if (e.persisted) alVolverAEnfocar();
+    }
+    window.addEventListener("pageshow", alRestaurarBfcache);
     return () => {
       document.removeEventListener("visibilitychange", alVolverAEnfocar);
       window.removeEventListener("focus", alVolverAEnfocar);
+      window.removeEventListener("pageshow", alRestaurarBfcache);
     };
   }, [cargarJornadaActiva]);
 

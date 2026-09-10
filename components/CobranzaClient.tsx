@@ -65,10 +65,18 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
     }
     document.addEventListener("visibilitychange", alVolver);
     window.addEventListener("focus", alVolver);
+    // Safari/iOS a veces restaura la página "congelada" desde el gesto de
+    // volver atrás (bfcache) en vez de recargarla — sin esto, se queda con
+    // datos de una jornada que ya no existe.
+    function alRestaurarBfcache(e: PageTransitionEvent) {
+      if (e.persisted) alVolver();
+    }
+    window.addEventListener("pageshow", alRestaurarBfcache);
     return () => {
       clearInterval(id);
       document.removeEventListener("visibilitychange", alVolver);
       window.removeEventListener("focus", alVolver);
+      window.removeEventListener("pageshow", alRestaurarBfcache);
     };
   }, [cargarJornada]);
 
