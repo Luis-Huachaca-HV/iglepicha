@@ -487,3 +487,21 @@ Ahora Dashboard, Jugadores, Draft, Partidos y Cobranza detectan
 específicamente ese caso (evento `pageshow` con `persisted`) y se
 resincronizan al instante apenas la página vuelve a mostrarse así,
 además de todos los demás respaldos que ya tenían.
+
+## Corrección: marcar asistencia ahora reintenta sola si la jornada cambió
+
+Antes, si la jornada había cambiado por debajo (alguien la reinició en
+otro dispositivo), marcar a alguien presente mostraba el aviso "esta
+jornada ya no existe" y el usuario tenía que darse cuenta y tocar el
+casillero de nuevo. Ahora la app **reintenta sola** con la jornada
+correcta en el momento — el toque nunca se pierde, y solo se ve un error
+si el reintento también falla.
+
+Si sigues viendo el aviso de forma repetida y consistente (no como algo
+ocasional), lo más probable es que **haya más de una persona probando la
+app al mismo tiempo** y alguien esté tocando "Reiniciar todo" o
+"Comenzar jornada nueva" mientras otra pantalla sigue activa — eso seguirá
+generando fricción sin importar cuánta resiliencia se agregue, porque es
+un reinicio real e intencional pasando en simultáneo. Para una prueba
+completa y limpia, lo más seguro es que una sola persona controle
+Configuraciones mientras el resto solo usa Jugadores/Draft/Partidos.

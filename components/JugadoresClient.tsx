@@ -64,15 +64,18 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
     setEquipos((eq as EquipoJornada[]) || []);
   }, []);
 
-  const cargarJornada = useCallback(() => {
-    fetch("/api/jornada/active", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!d?.jornada) return; // sondeo fallido: nunca borrar lo que ya está en pantalla
-        setJornada(d.jornada);
-        cargarAsistenciasYEquipos(d.jornada.id_jornada);
-      })
-      .catch(() => {});
+  const cargarJornada = useCallback(async () => {
+    try {
+      const r = await fetch("/api/jornada/active", { cache: "no-store" });
+      if (!r.ok) return null;
+      const d = await r.json();
+      if (!d?.jornada) return null; // sondeo fallido: nunca borrar lo que ya está en pantalla
+      setJornada(d.jornada);
+      cargarAsistenciasYEquipos(d.jornada.id_jornada);
+      return d.jornada as Jornada;
+    } catch {
+      return null;
+    }
   }, [cargarAsistenciasYEquipos]);
 
   useEffect(() => {
@@ -149,16 +152,30 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
       ...prev,
       [idUsuario]: { ...(prev[idUsuario] as AsistenciaDraft), id_usuario: idUsuario, id_jornada: jornada.id_jornada, presente } as AsistenciaDraft,
     }));
-    const res = await fetch("/api/asistencia", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id_jornada: jornada.id_jornada, id_usuario: idUsuario, presente }),
-    });
+
+    const intentar = (idJornada: string) =>
+      fetch("/api/asistencia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_jornada: idJornada, id_usuario: idUsuario, presente }),
+      });
+
+    let res = await intentar(jornada.id_jornada);
+    let data = res.ok ? null : await res.json().catch(() => ({}));
+
+    if (!res.ok && data?.jornadaInvalida) {
+      // La jornada cambió por debajo nuestro: recarga la real y reintenta
+      // sola, sin que el usuario tenga que darse cuenta ni tocar de nuevo.
+      const fresca = await cargarJornada();
+      if (fresca) {
+        res = await intentar(fresca.id_jornada);
+        data = res.ok ? null : await res.json().catch(() => ({}));
+      }
+    }
+
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
       setAsistencias((prev) => ({ ...prev, [idUsuario]: anterior as AsistenciaDraft }));
-      mostrarToast(data.error ?? "No se pudo actualizar la asistencia");
-      if (data.jornadaInvalida) cargarJornada();
+      mostrarToast(data?.error ?? "No se pudo actualizar la asistencia");
     }
   }
 
