@@ -505,3 +505,37 @@ generando fricción sin importar cuánta resiliencia se agregue, porque es
 un reinicio real e intencional pasando en simultáneo. Para una prueba
 completa y limpia, lo más seguro es que una sola persona controle
 Configuraciones mientras el resto solo usa Jugadores/Draft/Partidos.
+
+## Auditoría: por qué "jornada" se sentía tan fràgil, y la corrección de fondo
+
+Dos huecos concretos causaban que un reinicio se sintiera inconsistente
+entre pantallas:
+
+1. **"Reiniciar todo" no actualizaba ni su propia pantalla**: Configuraciones
+   borraba la jornada, creaba una nueva... pero se quedaba mostrando datos
+   de la vieja hasta el siguiente sondeo. Por eso "Guardar tiempos" podía
+   fallar con "Jornada no encontrada" justo después de resetear, en la
+   misma pantalla. Corregido: ahora se actualiza al instante con la
+   respuesta del propio reinicio.
+2. **Ninguna pantalla escuchaba "nació una jornada"**: Dashboard, Draft y
+   Cobranza sabían escuchar cambios a una jornada que YA conocían, pero no
+   tenían forma de enterarse de que había nacido una nueva — solo lo
+   notaban en el siguiente sondeo (hasta 5s de demora). Jugadores y
+   Partidos ni siquiera tenían esa suscripción. Ahora las 5 pantallas
+   tienen un canal siempre activo que avisa **al instante** (por Realtime,
+   no por sondeo) en cuanto aparece una jornada nueva en cualquier
+   dispositivo — sea por "Reiniciar todo" o "Comenzar jornada nueva".
+
+Esto no cambia el concepto de jornada (que ya era correcto: attendance,
+draft y equipos SÍ deben poder tocarse mientras `estado = "pendiente"`,
+antes de iniciar) — el problema era puramente de qué tan rápido cada
+pantalla se enteraba de un reemplazo de jornada.
+
+## Nuevo: popup de cobranza al finalizar la jornada
+
+Seguido el flujo que describiste: cuando el admin toca "Finalizar
+jornada" en el Dashboard, aparece un popup ahí mismo pidiendo el costo
+total de la cancha — sin tener que navegar a Cobranza. Se reparte solo
+entre los equipos ya armados. Si prefieres hacerlo después, el botón
+"Lo hago después" cierra el popup sin perder nada — se puede cargar el
+costo más tarde desde Cobranza como siempre.

@@ -13,10 +13,27 @@ const ETIQUETA_ESTADO: Record<string, string> = {
 
 export function DashboardClient({ sesion }: { sesion: SesionUsuario }) {
   const [jornada, setJornada] = useState<Jornada | null>(null);
+
+  // Canal SIEMPRE activo (no depende de tener ya una jornada cargada):
+  // avisa al instante si nace una jornada nueva en cualquier dispositivo
+  // (Reiniciar todo / Comenzar jornada nueva), sin esperar el sondeo de 5s.
+  useEffect(() => {
+    const canalNuevaJornada = supabase
+      .channel(`jornada-nueva-${Math.random().toString(36).slice(2)}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "jornadas" }, () => cargarJornadaActiva())
+      .subscribe();
+    return () => {
+      supabase.removeChannel(canalNuevaJornada);
+    };
+  }, []);
+
   const [presentes, setPresentes] = useState(0);
   const [equipos, setEquipos] = useState(0);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modalCobranza, setModalCobranza] = useState(false);
+  const [costoInput, setCostoInput] = useState("");
+  const [guardandoCosto, setGuardandoCosto] = useState(false);
   const esAdmin = sesion.rol_sistema === "admin" || sesion.rol_sistema === "super_admin";
 
   const cargarConteos = useCallback(async (idJornada: string) => {
@@ -119,6 +136,21 @@ export function DashboardClient({ sesion }: { sesion: SesionUsuario }) {
     }
     setJornada(data.jornada);
     setCargando(false);
+    if (accion === "finalizar" && esAdmin) setModalCobranza(true);
+  }
+
+  async function guardarCostoDesdeDashboard() {
+    if (!jornada) return;
+    const valor = Number(costoInput);
+    if (Number.isNaN(valor) || valor < 0) return;
+    setGuardandoCosto(true);
+    await fetch("/api/cobranza/costo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_jornada: jornada.id_jornada, costo_total: valor }),
+    });
+    setGuardandoCosto(false);
+    setModalCobranza(false);
   }
 
   async function nuevaJornada() {
@@ -193,6 +225,37 @@ export function DashboardClient({ sesion }: { sesion: SesionUsuario }) {
               {cargando ? "Creando…" : "Comenzar jornada nueva"}
             </button>
           )}
+        </div>
+      )}
+
+      {modalCobranza && (
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-pitch-950/80 p-6 backdrop-blur-sm" onClick={() => setModalCobranza(false)}>
+          <div className="w-full max-w-sm rounded-2xl border border-pitch-700 bg-pitch-900 p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <p className="mb-1 font-display text-xl font-bold">¡Jornada terminada!</p>
+            <p className="mb-4 text-sm text-mist">¿Cuánto costó la cancha hoy? Se reparte solo entre los equipos.</p>
+            <input
+              type="number"
+              min={0}
+              step="0.5"
+              value={costoInput}
+              onChange={(e) => setCostoInput(e.target.value)}
+              placeholder="S/ 0"
+              autoFocus
+              className="mb-4 w-full rounded border border-pitch-700 bg-pitch-950 px-3 py-3 text-center text-lg"
+            />
+            <div className="flex gap-3">
+              <button onClick={() => setModalCobranza(false)} className="flex-1 rounded-pill border border-pitch-700 py-3 text-sm">
+                Lo hago después
+              </button>
+              <button
+                onClick={guardarCostoDesdeDashboard}
+                disabled={guardandoCosto}
+                className="flex-1 rounded-pill bg-turf-500 py-3 text-sm font-bold text-pitch-950 disabled:opacity-50"
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

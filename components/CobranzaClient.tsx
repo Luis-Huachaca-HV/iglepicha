@@ -11,6 +11,20 @@ function soles(valor: number) {
 
 export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
   const [jornada, setJornada] = useState<Jornada | null>(null);
+
+  // Canal SIEMPRE activo (no depende de tener ya una jornada cargada):
+  // avisa al instante si nace una jornada nueva en cualquier dispositivo
+  // (Reiniciar todo / Comenzar jornada nueva), sin esperar el sondeo de 5s.
+  useEffect(() => {
+    const canalNuevaJornada = supabase
+      .channel(`jornada-nueva-${Math.random().toString(36).slice(2)}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "jornadas" }, () => cargarJornada())
+      .subscribe();
+    return () => {
+      supabase.removeChannel(canalNuevaJornada);
+    };
+  }, []);
+
   const [equipos, setEquipos] = useState<EquipoJornada[]>([]);
   const [asistencias, setAsistencias] = useState<AsistenciaDraft[]>([]);
   const { usuarios } = useUsuarios();

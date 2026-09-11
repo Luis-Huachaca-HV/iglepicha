@@ -35,10 +35,17 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
   async function hardReset() {
     setReseteando(true);
     const res = await fetch("/api/jornada/hard-reset", { method: "POST", cache: "no-store" });
+    const data = await res.json().catch(() => ({}));
     setReseteando(false);
     setConfirmarReset(false);
-    if (res.ok) mostrarToast("✓ Todo reiniciado — jugadores intactos");
-    else mostrarToast("No se pudo reiniciar");
+    if (res.ok && data.jornada) {
+      setJornada(data.jornada);
+      setTiempoTotalMin(String(Math.round(data.jornada.tiempo_total_seg / 60)));
+      setMiniPartidoMin(String(Math.round(data.jornada.duracion_mini_partido_seg / 60)));
+      mostrarToast("✓ Todo reiniciado — jugadores intactos");
+    } else {
+      mostrarToast("No se pudo reiniciar");
+    }
   }
 
   useEffect(() => {
