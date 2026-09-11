@@ -539,3 +539,24 @@ total de la cancha — sin tener que navegar a Cobranza. Se reparte solo
 entre los equipos ya armados. Si prefieres hacerlo después, el botón
 "Lo hago después" cierra el popup sin perder nada — se puede cargar el
 costo más tarde desde Cobranza como siempre.
+
+## Rastro de auditoría: quién y cuándo reinició la jornada
+
+Ya no hay que adivinar. Cada vez que se crea una jornada (primer uso,
+"Comenzar jornada nueva", o "Reiniciar todo") queda guardado quién lo
+hizo. Esto aparece en dos lugares:
+- En el **Dashboard**, debajo del estado: "Jornada iniciada por: [nombre]
+  (reinicio total / jornada nueva / primer uso)".
+- **En el momento mismo** que a alguien se le corta una acción porque la
+  jornada cambió (por ejemplo al marcar asistencia), el aviso ahora dice
+  exactamente quién la reinició, y la app ya reintentó tu cambio sola con
+  la jornada correcta.
+
+## "Reiniciar todo" ahora pide escribir una palabra para confirmar
+
+Antes bastaba un toque + un botón de "Sí, reiniciar". Como es un botón de
+emergencia que borra la jornada de TODOS los que estén usando la app en
+ese momento, ahora hay que escribir **REINICIAR** para que el botón se
+habilite — así nadie lo dispara sin querer, y si dos personas están
+probando al mismo tiempo, hace falta una acción bien deliberada para
+que uno le borre el trabajo al otro.

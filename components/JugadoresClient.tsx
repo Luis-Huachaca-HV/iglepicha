@@ -184,12 +184,17 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
       if (fresca) {
         res = await intentar(fresca.id_jornada);
         data = res.ok ? null : await res.json().catch(() => ({}));
+        mostrarToast(
+          res.ok
+            ? `↻ La jornada la reinició ${fresca.creado_por ?? "alguien"} — tu cambio ya se aplicó.`
+            : `↻ La jornada la reinició ${fresca.creado_por ?? "alguien"} — intenta de nuevo.`
+        );
       }
     }
 
     if (!res.ok) {
       setAsistencias((prev) => ({ ...prev, [idUsuario]: anterior as AsistenciaDraft }));
-      mostrarToast(data?.error ?? "No se pudo actualizar la asistencia");
+      if (!data?.jornadaInvalida) mostrarToast(data?.error ?? "No se pudo actualizar la asistencia");
     }
   }
 

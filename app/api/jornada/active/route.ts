@@ -31,7 +31,7 @@ export async function GET() {
 
   const { data: nueva, error: insertError } = await admin
     .from("jornadas")
-    .insert({ estado: "pendiente", tiempo_total_seg: 7200 })
+    .insert({ estado: "pendiente", tiempo_total_seg: 7200, creado_por: "sistema (primer uso)" })
     .select("*")
     .single();
 

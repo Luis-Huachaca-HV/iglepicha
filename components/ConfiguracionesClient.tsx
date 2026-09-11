@@ -28,6 +28,7 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
   const [mensajeUsuario, setMensajeUsuario] = useState<string | null>(null);
   const { mensaje: mensajeToast, mostrarToast } = useToast();
   const [confirmarReset, setConfirmarReset] = useState(false);
+  const [textoConfirmacion, setTextoConfirmacion] = useState("");
   const [reseteando, setReseteando] = useState(false);
 
   const esSuperAdmin = sesion.rol_sistema === "super_admin";
@@ -38,6 +39,7 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
     const data = await res.json().catch(() => ({}));
     setReseteando(false);
     setConfirmarReset(false);
+    setTextoConfirmacion("");
     if (res.ok && data.jornada) {
       setJornada(data.jornada);
       setTiempoTotalMin(String(Math.round(data.jornada.tiempo_total_seg / 60)));
@@ -296,18 +298,34 @@ export function ConfiguracionesClient({ sesion }: { sesion: SesionUsuario }) {
         <div className="fixed inset-0 z-20 flex items-center justify-center bg-pitch-950/80 p-6 backdrop-blur-sm" onClick={() => setConfirmarReset(false)}>
           <div className="w-full max-w-sm rounded-2xl border border-card-red bg-pitch-900 p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <p className="mb-2 font-display text-xl font-bold text-card-red">¿Reiniciar todo?</p>
-            <p className="mb-6 text-sm text-mist">
-              Se borra asistencia, equipos, capitanes, draft, partidos y cobranza de la jornada actual. Los jugadores
-              quedan intactos. No se puede deshacer.
+            <p className="mb-4 text-sm text-mist">
+              Se borra asistencia, equipos, capitanes, draft, partidos y cobranza de la jornada actual — para TODOS
+              los que estén usando la app ahora mismo. Los jugadores quedan intactos. No se puede deshacer.
             </p>
+            <p className="mb-2 text-xs text-mist">
+              Escribe <span className="font-bold text-card-red">REINICIAR</span> para confirmar:
+            </p>
+            <input
+              type="text"
+              value={textoConfirmacion}
+              onChange={(e) => setTextoConfirmacion(e.target.value)}
+              autoCapitalize="characters"
+              className="mb-4 w-full rounded border border-pitch-700 bg-pitch-950 px-3 py-3 text-center uppercase tracking-widest"
+            />
             <div className="flex gap-3">
-              <button onClick={() => setConfirmarReset(false)} className="flex-1 rounded-pill border border-pitch-700 py-3 text-sm">
+              <button
+                onClick={() => {
+                  setConfirmarReset(false);
+                  setTextoConfirmacion("");
+                }}
+                className="flex-1 rounded-pill border border-pitch-700 py-3 text-sm"
+              >
                 Cancelar
               </button>
               <button
                 onClick={hardReset}
-                disabled={reseteando}
-                className="flex-1 rounded-pill bg-card-red py-3 text-sm font-bold text-chalk disabled:opacity-50"
+                disabled={reseteando || textoConfirmacion.trim().toUpperCase() !== "REINICIAR"}
+                className="flex-1 rounded-pill bg-card-red py-3 text-sm font-bold text-chalk disabled:opacity-40"
               >
                 {reseteando ? "Reiniciando…" : "Sí, reiniciar"}
               </button>

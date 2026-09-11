@@ -44,6 +44,9 @@ create table jornadas (
   permitir_cambios_post_draft boolean not null default false,
   -- Configuraciones: duración por defecto de cada mini-partido (Partidos)
   duracion_mini_partido_seg int not null default 600,
+  -- Auditoría: quién creó/reinició esta jornada (nombre, no FK — así se
+  -- conserva el rastro aunque el usuario cambie de nombre o se borre).
+  creado_por text,
   creado_en timestamptz not null default now()
 );
 

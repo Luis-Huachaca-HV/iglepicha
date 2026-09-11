@@ -30,6 +30,7 @@ export interface Jornada {
   draft_turno_equipo_id: string | null;
   permitir_cambios_post_draft: boolean;
   duracion_mini_partido_seg: number;
+  creado_por: string | null;
 }
 
 export interface EquipoJornada {

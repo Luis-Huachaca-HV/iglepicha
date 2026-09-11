@@ -22,7 +22,7 @@ export async function POST() {
 
   const { data, error } = await admin
     .from("jornadas")
-    .insert({ estado: "pendiente", tiempo_total_seg: 7200 })
+    .insert({ estado: "pendiente", tiempo_total_seg: 7200, creado_por: `${sesion.nombre} (reinicio total)` })
     .select("*")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

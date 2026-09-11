@@ -17,7 +17,7 @@ export async function POST() {
   const admin = supabaseAdmin();
   const { data, error } = await admin
     .from("jornadas")
-    .insert({ estado: "pendiente", tiempo_total_seg: 7200 })
+    .insert({ estado: "pendiente", tiempo_total_seg: 7200, creado_por: `${sesion.nombre} (jornada nueva)` })
     .select("*")
     .single();
 

@@ -199,6 +199,10 @@ export function DashboardClient({ sesion }: { sesion: SesionUsuario }) {
         <span className="font-medium">{ETIQUETA_ESTADO[jornada.estado]}</span>
       </section>
 
+      {jornada.creado_por && (
+        <p className="text-center text-xs text-mist">Jornada iniciada por: {jornada.creado_por}</p>
+      )}
+
       {error && <p className="text-center text-sm text-card-red">{error}</p>}
 
       {esAdmin && jornada.estado !== "finalizada" && (
