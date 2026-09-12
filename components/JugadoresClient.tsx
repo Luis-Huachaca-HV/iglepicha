@@ -177,24 +177,20 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
     let res = await intentar(jornada.id_jornada);
     let data = res.ok ? null : await res.json().catch(() => ({}));
 
-    if (!res.ok && data?.jornadaInvalida) {
-      // La jornada cambió por debajo nuestro: recarga la real y reintenta
-      // sola, sin que el usuario tenga que darse cuenta ni tocar de nuevo.
+    // Hasta 2 reintentos silenciosos si la jornada local estaba vieja —
+    // en cada uno se vuelve a pedir cuál es la jornada real antes de
+    // reintentar, así nunca se queda pegado a un ID que ya no sirve.
+    for (let intento = 0; !res.ok && data?.jornadaInvalida && intento < 2; intento++) {
+      if (intento === 1) await new Promise((r) => setTimeout(r, 400));
       const fresca = await cargarJornada();
-      if (fresca) {
-        res = await intentar(fresca.id_jornada);
-        data = res.ok ? null : await res.json().catch(() => ({}));
-        mostrarToast(
-          res.ok
-            ? `↻ La jornada la reinició ${fresca.creado_por ?? "alguien"} — tu cambio ya se aplicó.`
-            : `↻ La jornada la reinició ${fresca.creado_por ?? "alguien"} — intenta de nuevo.`
-        );
-      }
+      if (!fresca) break;
+      res = await intentar(fresca.id_jornada);
+      data = res.ok ? null : await res.json().catch(() => ({}));
     }
 
     if (!res.ok) {
       setAsistencias((prev) => ({ ...prev, [idUsuario]: anterior as AsistenciaDraft }));
-      if (!data?.jornadaInvalida) mostrarToast(data?.error ?? "No se pudo actualizar la asistencia");
+      mostrarToast(data?.error ?? "No se pudo actualizar la asistencia");
     }
   }
 

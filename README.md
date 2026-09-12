@@ -560,3 +560,27 @@ ese momento, ahora hay que escribir **REINICIAR** para que el botón se
 habilite — así nadie lo dispara sin querer, y si dos personas están
 probando al mismo tiempo, hace falta una acción bien deliberada para
 que uno le borre el trabajo al otro.
+
+## Corrección: el mensaje de "la jornada la reinició alguien" podía ser falso
+
+Bug en el propio mensaje, no en la lógica de datos: cuando el primer
+intento de marcar asistencia fallaba, la app SIEMPRE mostraba "la jornada
+la reinició X", sin importar por qué había fallado el reintento. Si el
+reintento fallaba por otro motivo (una red lenta, lo que sea), igual
+decía lo mismo — un mensaje engañoso. Ahora, si el reintento falla,
+muestra el motivo real que devuelve el servidor. Además, agrega un
+segundo reintento con una breve espera antes de rendirse, para absorber
+cualquier tropiezo pasajero sin que el usuario lo note.
+
+Diagnóstico confirmado: la base de datos está sana (una sola jornada,
+sin duplicados) — así que si el error vuelve a aparecer, el mensaje
+nuevo va a decir la razón real en vez de siempre culpar a un reinicio.
+
+## Importante: cierra la pestaña del navegador entre actualizaciones
+
+Una app web no se actualiza sola en una pestaña ya abierta — agarra el
+código nuevo recién cuando la abres de cero. Si vienes probando en la
+misma pestaña desde hace varias actualizaciones, es probable que ninguno
+de los arreglos recientes esté corriendo todavía ahí. Para cada prueba
+nueva: cierra la pestaña por completo (no solo navegues para atrás) y
+vuelve a abrir la URL.
