@@ -64,7 +64,7 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
   const puedeMarcarAOtros = ["admin", "super_admin", "capitan"].includes(sesion.rol_sistema);
   const esAdmin = sesion.rol_sistema === "admin" || sesion.rol_sistema === "super_admin";
   const esCapitan = sesion.rol_sistema === "capitan";
-  const jornadaBloqueada = jornada?.estado === "en_curso";
+  const jornadaBloqueada = jornada?.estado !== "pendiente";
   const miEquipo = equipos.find((e) => e.id_capitan === sesion.id_usuario) ?? null;
 
   const cargarAsistenciasYEquipos = useCallback(async (idJornada: string) => {
@@ -329,7 +329,7 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
 
       {jornadaBloqueada && (
         <div className="rounded border border-dashed border-pitch-700 bg-pitch-900 px-4 py-3 text-center text-sm text-mist">
-          🔒 Asistencia bloqueada — la jornada ya está en curso.
+          🔒 Asistencia y equipos bloqueados — la jornada ya empezó o finalizó.
         </div>
       )}
 
@@ -462,7 +462,7 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
               </div>
             )}
 
-            {(esAdmin || esCapitan) && (
+            {(esAdmin || esCapitan) && !jornadaBloqueada && (
               <div className="mt-4 border-t border-pitch-800 pt-4">
                 <p className="mb-2 text-xs uppercase tracking-wide text-mist">
                   Equipo actual: {nombreEquipo(asistencias[jugadorSeleccionado.id_usuario]?.id_equipo)}

@@ -120,6 +120,9 @@ export function DashboardClient({ sesion }: { sesion: SesionUsuario }) {
 
   async function cambiarEstado(accion: "iniciar" | "finalizar") {
     if (!jornada) return;
+    if (accion === "finalizar" && !window.confirm("¿Finalizar la jornada? Se abrirá Cobranza para registrar el total.")) {
+      return;
+    }
     setCargando(true);
     setError(null);
     const res = await fetch("/api/jornada/estado", {

@@ -1,8 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { esPinHashValido } from "@/lib/pin-formato";
 import type { Posicion, RolSistema } from "@/lib/types";
 
 export interface UsuarioLista {
@@ -14,39 +12,35 @@ export interface UsuarioLista {
   tiene_pin: boolean;
 }
 
-// Hook compartido para la lista de usuarios. Lee DIRECTO de Supabase desde
-// el navegador (igual que equipos/asistencia/partidos en el resto de la
-// app) en vez de pasar por una ruta de Next.js — así evitamos cualquier
-// capa extra de caché de Next/Vercel que pueda quedarse con una versión
-// vieja. Se mantiene al día solo vía Realtime.
+// La lista pasa por la API para que el navegador nunca reciba pin_hash.
+// Se refresca al montar, cada cinco segundos y al recuperar foco; las
+// respuestas llevan no-store y la ruta es dinámica.
 export function useUsuarios() {
   const [usuarios, setUsuarios] = useState<UsuarioLista[]>([]);
 
   const recargarUsuarios = useCallback(async () => {
-    const { data } = await supabase
-      .from("usuarios")
-      .select("id_usuario, nombre, edad, rol_sistema, posicion, pin_hash")
-      .order("nombre", { ascending: true });
-    setUsuarios(
-      (data || []).map((u) => ({
-        id_usuario: u.id_usuario,
-        nombre: u.nombre,
-        edad: u.edad,
-        rol_sistema: u.rol_sistema,
-        posicion: u.posicion,
-        tiene_pin: esPinHashValido(u.pin_hash),
-      }))
-    );
+    try {
+      const res = await fetch("/api/usuarios", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      setUsuarios((data.usuarios ?? []) as UsuarioLista[]);
+    } catch {
+      // Conserva la lista actual ante un corte momentáneo de red.
+    }
   }, []);
 
   useEffect(() => {
     recargarUsuarios();
-    const canal = supabase
-      .channel(`usuarios-${Math.random().toString(36).slice(2)}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "usuarios" }, () => recargarUsuarios())
-      .subscribe();
+    const id = window.setInterval(recargarUsuarios, 5000);
+    const alVolver = () => {
+      if (document.visibilityState === "visible") recargarUsuarios();
+    };
+    document.addEventListener("visibilitychange", alVolver);
+    window.addEventListener("focus", alVolver);
     return () => {
-      supabase.removeChannel(canal);
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", alVolver);
+      window.removeEventListener("focus", alVolver);
     };
   }, [recargarUsuarios]);
 

@@ -25,8 +25,8 @@ export async function POST(req: NextRequest) {
 
   const { data: jornada } = await admin.from("jornadas").select("*").eq("id_jornada", id_jornada).single();
   if (!jornada) return NextResponse.json({ error: "Jornada no encontrada" }, { status: 404 });
-  if (jornada.estado === "en_curso") {
-    return NextResponse.json({ error: "La cobranza está bloqueada mientras la jornada está en curso" }, { status: 400 });
+  if (jornada.estado !== "finalizada") {
+    return NextResponse.json({ error: "La cobranza se habilita al finalizar la jornada." }, { status: 400 });
   }
 
   await admin.from("jornadas").update({ costo_total }).eq("id_jornada", id_jornada);

@@ -266,7 +266,13 @@ export function PartidosClient({ sesion }: { sesion: SesionUsuario }) {
     return (
       <div className="rounded border border-dashed border-pitch-700 p-6 text-center">
         <p className="text-chalk">{errorPartido ?? "Todavía no hay partido."}</p>
-        <p className="mt-2 text-sm text-mist">Completa el Draft en la pestaña Draft para armar los equipos.</p>
+        <p className="mt-2 text-sm text-mist">
+          {jornada.estado === "pendiente"
+            ? "Completa el draft e inicia la jornada: ahí se sortea el primer partido."
+            : jornada.estado === "finalizada"
+              ? "La jornada terminó; revisa Cobranza para cerrar los pagos."
+              : "Esperando a que se prepare el siguiente partido."}
+        </p>
       </div>
     );
   }

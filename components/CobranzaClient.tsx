@@ -120,7 +120,12 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
   }, [jornada?.id_jornada, cargarEquiposYAsistencias]);
 
   const usuariosMap = useMemo(() => Object.fromEntries(usuarios.map((u) => [u.id_usuario, u])), [usuarios]);
-  const bloqueado = jornada?.estado === "en_curso";
+  const bloqueado = jornada?.estado !== "finalizada";
+  const equiposVisibles = useMemo(() => {
+    if (esAdmin) return equipos;
+    if (sesion.rol_sistema === "capitan") return equipos.filter((equipo) => equipo.id_capitan === sesion.id_usuario);
+    return [];
+  }, [equipos, esAdmin, sesion.id_usuario, sesion.rol_sistema]);
 
   function rosterDe(idEquipo: string) {
     return asistencias.filter((a) => a.id_equipo === idEquipo);
@@ -173,7 +178,7 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
 
   if (!jornada) return <p className="text-mist">Cargando…</p>;
 
-  const totalRecaudado = equipos.reduce((suma, e) => {
+  const totalRecaudado = equiposVisibles.reduce((suma, e) => {
     const roster = rosterDe(e.id_equipo);
     const cuotaJugador = roster.length > 0 ? (e.cuota_equipo || 0) / roster.length : 0;
     return suma + roster.filter((a) => a.pago_realizado).length * cuotaJugador;
@@ -190,7 +195,7 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
         </p>
       </div>
 
-      {todoConcluido && (
+      {esAdmin && todoConcluido && (
         <div className="rounded border border-turf-500 bg-pitch-900 p-4 text-center">
           <p className="font-display text-lg font-bold text-turf-400">🎉 ¡Gracias! Todo concluido.</p>
           <p className="mt-1 text-xs text-mist">Todos los capitanes entregaron el total al admin.</p>
@@ -199,7 +204,7 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
 
       {bloqueado && (
         <div className="rounded border border-dashed border-pitch-700 bg-pitch-900 px-4 py-3 text-center text-sm text-mist">
-          🔒 Cobranza bloqueada mientras la jornada está en curso.
+          🔒 Cobranza disponible al finalizar la jornada.
         </div>
       )}
 
@@ -229,10 +234,11 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
       )}
 
       <div className="flex flex-col gap-4">
-        {equipos.map((e) => {
+        {equiposVisibles.map((e) => {
           const roster = rosterDe(e.id_equipo);
           const cuotaJugador = roster.length > 0 ? (e.cuota_equipo || 0) / roster.length : 0;
           const pagados = roster.filter((a) => a.pago_realizado).length;
+          const todosPagaron = roster.length > 0 && pagados === roster.length;
           return (
             <div
               key={e.id_equipo}
@@ -268,21 +274,27 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
 
               {esAdmin && (
                 <button
-                  disabled={bloqueado || e.pago_entregado_admin}
+                  disabled={bloqueado || e.pago_entregado_admin || !todosPagaron}
                   onClick={() => setConfirmarEntrega(e)}
                   className={`mt-3 w-full rounded-pill py-2.5 text-xs font-bold disabled:opacity-70 ${
                     e.pago_entregado_admin ? "bg-turf-700 text-chalk" : "border border-dashed border-floodlight text-floodlight"
                   }`}
                 >
-                  {e.pago_entregado_admin ? "✓ Capitán entregó el total al admin" : `Capitán entregó ${soles(e.cuota_equipo || 0)} al admin`}
+                  {e.pago_entregado_admin
+                    ? "✓ Capitán entregó el total al admin"
+                    : todosPagaron
+                      ? `Capitán entregó ${soles(e.cuota_equipo || 0)} al admin`
+                      : "Falta cobrar a jugadores"}
                 </button>
               )}
             </div>
           );
         })}
-        {equipos.length === 0 && (
+        {equiposVisibles.length === 0 && (
           <div className="rounded border border-dashed border-pitch-700 p-6 text-center text-sm text-mist">
-            Todavía no hay equipos armados (completa el Draft primero).
+            {sesion.rol_sistema === "jugador_registrado"
+              ? "La cobranza la gestionan los capitanes y el admin."
+              : "Todavía no hay equipos armados (completa el Draft primero)."}
           </div>
         )}
       </div>

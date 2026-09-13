@@ -8,10 +8,9 @@ export const dynamic = "force-dynamic";
 
 // POST /api/asistencia/asignar-equipo
 // body: { id_jornada: string, id_usuario: string, id_equipo: string | null }
-// Asigna (o quita, con id_equipo null) a un jugador de un equipo en
-// cualquier momento — durante el draft, después de terminado, o incluso
-// con un partido en curso. Pensado para "llegó tarde, súmalo a un equipo
-// ya" sin pasar por el flujo de turnos del Draft.
+// Asigna (o quita, con id_equipo null) a un jugador mientras la jornada
+// todavía está en preparación/draft. Al iniciarla, los equipos quedan
+// congelados para que el sorteo y la cobranza sean consistentes.
 // - admin/super_admin pueden asignar a cualquier equipo.
 // - capitán solo puede asignar a SU PROPIO equipo (o quitar a alguien de él).
 export async function POST(req: NextRequest) {
@@ -30,6 +29,11 @@ export async function POST(req: NextRequest) {
   }
 
   const admin = supabaseAdmin();
+  const { data: jornada } = await admin.from("jornadas").select("estado").eq("id_jornada", id_jornada).maybeSingle();
+  if (!jornada) return NextResponse.json({ error: "Jornada no encontrada" }, { status: 404 });
+  if (jornada.estado !== "pendiente") {
+    return NextResponse.json({ error: "Los equipos se bloquean al iniciar la jornada." }, { status: 400 });
+  }
 
   if (sesion.rol_sistema === "capitan") {
     if (id_equipo) {

@@ -18,10 +18,34 @@ export async function POST(req: NextRequest) {
   if (!id_partido) return NextResponse.json({ error: "Falta id_partido" }, { status: 400 });
 
   const admin = supabaseAdmin();
+  const { data: partidoExistente } = await admin
+    .from("mini_partidos")
+    .select("id_jornada, estado")
+    .eq("id_partido", id_partido)
+    .maybeSingle();
+  if (!partidoExistente) return NextResponse.json({ error: "Partido no encontrado" }, { status: 404 });
+  const { data: jornada } = await admin
+    .from("jornadas")
+    .select("estado")
+    .eq("id_jornada", partidoExistente.id_jornada)
+    .maybeSingle();
+  if (jornada?.estado !== "en_curso") {
+    return NextResponse.json({ error: "La jornada debe estar en curso para iniciar un partido." }, { status: 400 });
+  }
+  if (partidoExistente.estado !== "pendiente") {
+    return NextResponse.json({ error: "Este partido ya fue iniciado o finalizado." }, { status: 400 });
+  }
   const patch: Record<string, unknown> = { estado: "en_curso", inicio_ts: new Date().toISOString() };
   if (duracion_seg && duracion_seg > 0) patch.duracion_seg = duracion_seg;
 
-  const { data, error } = await admin.from("mini_partidos").update(patch).eq("id_partido", id_partido).select("*").single();
+  const { data, error } = await admin
+    .from("mini_partidos")
+    .update(patch)
+    .eq("id_partido", id_partido)
+    .eq("estado", "pendiente")
+    .select("*")
+    .maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) return NextResponse.json({ error: "El partido cambió antes de poder iniciarse." }, { status: 409 });
   return NextResponse.json({ partido: data });
 }

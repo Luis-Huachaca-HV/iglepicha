@@ -26,6 +26,13 @@ export async function POST(req: NextRequest) {
   if (!partido || !partido.id_equipo_a || !partido.id_equipo_b) {
     return NextResponse.json({ error: "Partido inválido" }, { status: 400 });
   }
+  if (partido.estado !== "en_curso") {
+    return NextResponse.json({ error: "Solo se puede finalizar un partido en curso." }, { status: 400 });
+  }
+  const { data: jornada } = await admin.from("jornadas").select("estado").eq("id_jornada", partido.id_jornada).maybeSingle();
+  if (jornada?.estado !== "en_curso") {
+    return NextResponse.json({ error: "La jornada ya no está en curso." }, { status: 400 });
+  }
 
   let ganador: string;
   let perdedor: string;
@@ -38,6 +45,9 @@ export async function POST(req: NextRequest) {
   } else {
     if (!id_equipo_ganador) {
       return NextResponse.json({ error: "Empate: falta elegir manualmente quién continúa" }, { status: 400 });
+    }
+    if (id_equipo_ganador !== partido.id_equipo_a && id_equipo_ganador !== partido.id_equipo_b) {
+      return NextResponse.json({ error: "El equipo elegido no participa en este partido." }, { status: 400 });
     }
     ganador = id_equipo_ganador;
     perdedor = ganador === partido.id_equipo_a ? partido.id_equipo_b : partido.id_equipo_a;

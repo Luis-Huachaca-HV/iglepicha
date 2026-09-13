@@ -8,9 +8,8 @@ export const dynamic = "force-dynamic";
 
 // POST /api/cobranza/pago
 // body: { id_jornada: string, id_usuario: string, pago_realizado: boolean }
-// Bloqueada mientras la jornada está "en_curso" (spec: Cobranza se
-// congela durante el juego). Admin/super_admin/capitán pueden marcar a
-// cualquiera; un jugador puede marcarse solo a sí mismo.
+// Disponible solo tras finalizar la jornada. Admin/super_admin pueden
+// marcar a cualquiera; cada capitán solo a jugadores de su propio equipo.
 export async function POST(req: NextRequest) {
   const sesion = obtenerSesionActual();
   if (!sesion) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -26,8 +25,8 @@ export async function POST(req: NextRequest) {
 
   const admin = supabaseAdmin();
   const { data: jornada } = await admin.from("jornadas").select("estado").eq("id_jornada", id_jornada).single();
-  if (jornada?.estado === "en_curso") {
-    return NextResponse.json({ error: "La cobranza está bloqueada mientras la jornada está en curso" }, { status: 400 });
+  if (jornada?.estado !== "finalizada") {
+    return NextResponse.json({ error: "La cobranza se habilita al finalizar la jornada." }, { status: 400 });
   }
 
   if (!["admin", "super_admin", "capitan"].includes(sesion.rol_sistema)) {
@@ -36,10 +35,21 @@ export async function POST(req: NextRequest) {
 
   const { data: actual } = await admin
     .from("asistencia_draft")
-    .select("pago_realizado")
+    .select("pago_realizado, id_equipo")
     .eq("id_jornada", id_jornada)
     .eq("id_usuario", id_usuario)
     .maybeSingle();
+  if (!actual?.id_equipo) return NextResponse.json({ error: "El jugador no pertenece a un equipo de esta jornada." }, { status: 400 });
+  if (sesion.rol_sistema === "capitan") {
+    const { data: equipo } = await admin
+      .from("equipos_jornada")
+      .select("id_capitan")
+      .eq("id_equipo", actual.id_equipo)
+      .maybeSingle();
+    if (equipo?.id_capitan !== sesion.id_usuario) {
+      return NextResponse.json({ error: "Solo puedes marcar pagos de tu propio equipo." }, { status: 403 });
+    }
+  }
   if (actual?.pago_realizado && !pago_realizado) {
     return NextResponse.json({ error: "Ya estaba marcado como pagado — no se puede deshacer" }, { status: 400 });
   }

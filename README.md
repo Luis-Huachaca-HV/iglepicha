@@ -26,6 +26,10 @@ demográficos y radar de stats por jugador.
    > vuelvas a correr — en vez de eso corre solo
    > `supabase/migrations/002_draft.sql`, que agrega las columnas nuevas
    > sin tocar lo que ya tenías.
+
+   Si tu proyecto ya estaba creado con una versión anterior de esta app,
+   ejecuta también `supabase/migrations/010_proteger_pin_hash.sql`. Es una
+   migración de seguridad: deja de publicar hashes de PIN por Realtime.
 3. Ve a **Project Settings → API** y copia:
    - `Project URL` → será `NEXT_PUBLIC_SUPABASE_URL`
    - `anon public` key → será `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -122,9 +126,10 @@ dependa de esto conviene:
 
 ## Cómo funciona Partidos
 
-1. En cuanto el Draft termina, la pestaña Partidos arma la **cola** con el
-   mismo orden en que se eligieron los equipos, y crea el primer partido
-   con los dos primeros de la fila.
+1. Al terminar el Draft, el admin toca **Iniciar jornada** en el Dashboard.
+   En ese momento se arma la **cola** con el orden del draft y se sortean
+   los dos equipos del primer partido. Visitar Partidos antes de iniciar no
+   modifica nada.
 2. El admin define la duración (minutos) y toca "Iniciar partido" — arranca
    el cronómetro y el marcador en 0-0.
 3. Admin o capitán registran goles/faltas con los botones ⚽/🟨, eligiendo
@@ -195,13 +200,11 @@ suscrito, pero Supabase no envía ningún aviso a menos que la tabla esté
 agregada a la publicación `supabase_realtime` — es un interruptor a nivel
 de base de datos, no de código, que hasta ahora nadie había activado.
 
-`supabase/migrations/006_realtime.sql` lo activa para las 6 tablas que la
-app necesita escuchar en vivo (`usuarios`, `jornadas`, `equipos_jornada`,
-`asistencia_draft`, `mini_partidos`, `eventos_partido`). Además, se creó
-un hook compartido (`lib/useUsuarios.ts`) que todas las pantallas usan
-para la lista de usuarios, así que un jugador nuevo aparece al instante en
-Jugadores, Draft, Partidos, Cobranza, Configuraciones y en el login mismo,
-sin que nadie tenga que refrescar.
+`supabase/migrations/006_realtime.sql` habilita las tablas de jornada que
+la app escucha en vivo (`jornadas`, `equipos_jornada`,
+`asistencia_draft`, `mini_partidos`, `eventos_partido`). La lista de
+usuarios se consulta por una API segura y se refresca cada 5 segundos o al
+volver a la app; así un hash de PIN nunca llega al navegador.
 
 ## Mensajes de confirmación
 
@@ -209,15 +212,13 @@ Al agregar un jugador (desde Jugadores o Configuraciones) o resetear un
 PIN, aparece un mensaje breve tipo "✓ Jugador agregado" en la parte de
 abajo de la pantalla.
 
-## Asignar jugadores a un equipo en cualquier momento
+## Altas tardías durante la preparación
 
-Antes, un jugador solo podía entrar a un equipo durante el Draft (por
-turnos) o, después del Draft, solo si el admin activaba "cambios
-post-draft". Ahora, desde Jugadores, tocando el nombre de cualquier
-jugador, admin y capitán (a su propio equipo) pueden ponerlo o quitarlo
-de un equipo en cualquier momento — durante el Draft, después de
-terminado, o incluso con un partido en curso. Así un jugador que llega
-tarde se puede sumar a un equipo sin interrumpir nada.
+Mientras la jornada está pendiente —incluido el Draft—, desde Jugadores
+el admin (o el capitán en su propio equipo) puede sumar o quitar a alguien.
+Así una llegada tardía puede marcarse presente y aparecer en la bolsa del
+Draft. Al iniciar la jornada, asistencia y equipos quedan bloqueados para
+que los partidos y la cobranza tengan una base fija.
 
 ## Diseño para celular: notch / Dynamic Island
 
@@ -312,11 +313,9 @@ de Supabase desde el navegador — y esa capa de más es la que venía dando
 problemas de caché una y otra vez, sin importar cuántos `no-store` le
 pusiéramos.
 
-Ahora `lib/useUsuarios.ts` lee **directo de Supabase**, exactamente igual
-que Draft, Partidos, Cobranza y asistencia (que nunca tuvieron este
-problema). Ya no depende de ninguna ruta de Next.js ni de configuración de
-caché — un jugador nuevo aparece al toque, en cualquier pantalla, porque
-usa el mismo camino que ya sabíamos que funciona bien.
+Ahora `lib/useUsuarios.ts` consume `/api/usuarios` con `no-store` y tiene
+sondeo de respaldo cada 5 segundos. La ruta devuelve solo los datos que la
+pantalla necesita y el booleano `tiene_pin`, nunca el hash del PIN.
 
 ## Correcciones: capitanes, permisos del draft, y el "reinicio" fantasma
 
@@ -366,15 +365,17 @@ reemplazar a un capitán por otro directamente, dímelo y agrego ese botón.
 
 ## Cobranza de dos niveles (corregido según el flujo real)
 
-1. Admin define el costo total → se reparte entre equipos (capitanes),
-   como antes.
-2. **Jugador → Capitán**: admin o capitán marcan si un jugador pagó.
+1. Al finalizar la jornada, el admin define el costo total → se reparte
+   entre equipos (capitanes).
+2. **Jugador → Capitán**: admin o el capitán de ese mismo equipo marcan si
+   un jugador pagó.
    Ahora pide **confirmación** antes de marcarlo, y una vez marcado
    **no se puede deshacer** (ni en botón ni en el servidor) — evita que un
    mal click borre un pago ya confirmado. Los jugadores ya no pueden
    automarcarse (solo capitán/admin, según pediste).
-3. **Capitán → Admin**: nuevo botón por equipo, solo para admin, "Capitán
-   entregó S/ X al admin" — también con confirmación y sin vuelta atrás.
+3. **Capitán → Admin**: cuando todos los jugadores de un equipo pagaron,
+   el admin puede confirmar "Capitán entregó S/ X al admin"; también es
+   irreversible.
    El mensaje "🎉 Todo concluido" ahora aparece cuando **todos los
    capitanes** entregaron su total al admin (no cuando los jugadores le
    pagaron a su capitán, que es un paso intermedio).
@@ -465,12 +466,11 @@ en el siguiente ciclo.
 
 Antes se podía seguir marcando presentes y agregando jugadores en
 cualquier momento. Ahora, en cuanto el admin toca "Iniciar jornada" en el
-Dashboard, la pestaña Jugadores muestra "🔒 Asistencia bloqueada — la
-jornada ya está en curso" y no deja marcar/desmarcar a nadie ni agregar
-jugadores nuevos — el bloqueo se aplica tanto en pantalla como en el
-servidor. Mientras el draft está en curso (pero la jornada todavía no se
-inició desde el Dashboard), sigue estando todo abierto para poder sumar
-gente de último momento.
+Dashboard, la pestaña Jugadores bloquea asistencia, altas y cambios de
+equipo; el bloqueo se aplica tanto en pantalla como en el servidor.
+Mientras el draft está en curso (pero la jornada todavía no se inició
+desde el Dashboard), sigue estando todo abierto para sumar gente de último
+momento.
 
 ## Corrección: la pantalla quedaba "congelada" al volver atrás en Safari
 

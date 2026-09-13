@@ -14,7 +14,7 @@ export async function GET() {
   const admin = supabaseAdmin();
   const { data, error } = await admin
     .from("usuarios")
-    .select("id_usuario, nombre, edad, rol_sistema, pin_hash")
+    .select("id_usuario, nombre, edad, rol_sistema, posicion, pin_hash")
     .order("nombre", { ascending: true });
 
   if (error) {
@@ -26,6 +26,7 @@ export async function GET() {
     nombre: u.nombre,
     edad: u.edad,
     rol_sistema: u.rol_sistema,
+    posicion: u.posicion,
     tiene_pin: esPinHashValido(u.pin_hash),
   }));
 

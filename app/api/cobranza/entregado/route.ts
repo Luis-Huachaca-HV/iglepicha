@@ -21,8 +21,16 @@ export async function POST(req: NextRequest) {
 
   const admin = supabaseAdmin();
   const { data: actual } = await admin.from("equipos_jornada").select("pago_entregado_admin").eq("id_equipo", id_equipo).single();
+  if (!actual) return NextResponse.json({ error: "Equipo no encontrado" }, { status: 404 });
   if (actual?.pago_entregado_admin) {
     return NextResponse.json({ error: "Ya estaba confirmado — no se puede deshacer" }, { status: 400 });
+  }
+  const { data: miembros } = await admin
+    .from("asistencia_draft")
+    .select("pago_realizado")
+    .eq("id_equipo", id_equipo);
+  if ((miembros ?? []).some((miembro) => !miembro.pago_realizado)) {
+    return NextResponse.json({ error: "Primero registra el pago de todos los jugadores del equipo." }, { status: 400 });
   }
 
   const { data, error } = await admin
