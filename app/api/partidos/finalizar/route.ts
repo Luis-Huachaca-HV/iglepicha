@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 // perdedor va al final de la cola; el próximo equipo en la cola entra
 // a jugar contra el ganador ("el que gana se queda").
 export async function POST(req: NextRequest) {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion || (sesion.rol_sistema !== "admin" && sesion.rol_sistema !== "super_admin")) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }

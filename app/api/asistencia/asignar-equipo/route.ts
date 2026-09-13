@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 // - admin/super_admin pueden asignar a cualquier equipo.
 // - capitán solo puede asignar a SU PROPIO equipo (o quitar a alguien de él).
 export async function POST(req: NextRequest) {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion || !["admin", "super_admin", "capitan"].includes(sesion.rol_sistema)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }

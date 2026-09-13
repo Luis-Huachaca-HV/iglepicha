@@ -14,7 +14,7 @@ const ROLES_VALIDOS: RolSistema[] = ["super_admin", "admin", "capitan", "jugador
 // Crea un usuario nuevo. Sin PIN todavía (si el rol lo requiere, se
 // crea la primera vez que esa persona inicia sesión — ver /api/auth/login).
 export async function POST(req: NextRequest) {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion || (sesion.rol_sistema !== "admin" && sesion.rol_sistema !== "super_admin")) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }

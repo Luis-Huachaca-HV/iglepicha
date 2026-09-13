@@ -9,7 +9,7 @@ const POSICIONES = ["POR", "DEF", "MC", "DEL"];
 // POST /api/usuarios/posicion
 // body: { id_usuario: string, posicion: "POR"|"DEF"|"MC"|"DEL" }
 export async function POST(req: NextRequest) {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion || (sesion.rol_sistema !== "admin" && sesion.rol_sistema !== "super_admin")) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }

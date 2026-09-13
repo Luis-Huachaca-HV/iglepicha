@@ -31,8 +31,9 @@ export function leerSesionDesdeCookie(valor: string | undefined): SesionUsuario 
 }
 
 // Helper para Server Components / Route Handlers
-export function obtenerSesionActual(): SesionUsuario | null {
-  const valor = cookies().get(COOKIE_NAME)?.value;
+export async function obtenerSesionActual(): Promise<SesionUsuario | null> {
+  const cookieStore = await cookies();
+  const valor = cookieStore.get(COOKIE_NAME)?.value;
   return leerSesionDesdeCookie(valor);
 }
 

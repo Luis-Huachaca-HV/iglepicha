@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 // POST /api/partidos/evento
 // body: { id_partido: string, accion: "gol" | "falta", id_jugador: string }
 export async function POST(req: NextRequest) {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion || !["admin", "super_admin", "capitan"].includes(sesion.rol_sistema)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }

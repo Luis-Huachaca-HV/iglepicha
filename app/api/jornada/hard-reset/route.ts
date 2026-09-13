@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 // hace lo mismo que correr reset-jornadas.sql a mano en Supabase, pero
 // desde la app. Solo admin/super_admin.
 export async function POST() {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion || (sesion.rol_sistema !== "admin" && sesion.rol_sistema !== "super_admin")) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }

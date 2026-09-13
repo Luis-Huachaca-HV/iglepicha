@@ -4,8 +4,8 @@ import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
 import { JugadoresClient } from "@/components/JugadoresClient";
 
-export default function JugadoresPage() {
-  const sesion = obtenerSesionActual();
+export default async function JugadoresPage() {
+  const sesion = await obtenerSesionActual();
   if (!sesion) redirect("/login");
 
   return (

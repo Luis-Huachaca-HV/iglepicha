@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 // capitán presente a su propio equipo, y arranca el draft en el primer
 // equipo (por orden de creación).
 export async function POST(req: NextRequest) {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion || (sesion.rol_sistema !== "admin" && sesion.rol_sistema !== "super_admin")) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }

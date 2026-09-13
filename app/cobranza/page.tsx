@@ -4,8 +4,8 @@ import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
 import { CobranzaClient } from "@/components/CobranzaClient";
 
-export default function CobranzaPage() {
-  const sesion = obtenerSesionActual();
+export default async function CobranzaPage() {
+  const sesion = await obtenerSesionActual();
   if (!sesion) redirect("/login");
 
   return (

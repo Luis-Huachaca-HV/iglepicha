@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 // el login, la app le va a pedir crear un PIN nuevo (mismo flujo que la
 // primera vez). Soluciona el caso de "olvidé mi PIN" sin tocar Supabase.
 export async function POST(req: NextRequest) {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion || (sesion.rol_sistema !== "admin" && sesion.rol_sistema !== "super_admin")) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }

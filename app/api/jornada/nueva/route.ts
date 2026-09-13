@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 // Solo admin/super_admin, y pensado para usarse cuando la jornada actual
 // ya está "finalizada" y quieres arrancar la siguiente pichanga.
 export async function POST() {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion || (sesion.rol_sistema !== "admin" && sesion.rol_sistema !== "super_admin")) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }

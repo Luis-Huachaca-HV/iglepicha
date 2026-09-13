@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 // Disponible solo tras finalizar la jornada. Admin/super_admin pueden
 // marcar a cualquiera; cada capitán solo a jugadores de su propio equipo.
 export async function POST(req: NextRequest) {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const { id_jornada, id_usuario, pago_realizado } = (await req.json()) as {

@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 // Marca asistencia. Cualquier usuario logueado puede marcarse a sí mismo;
 // admin/super_admin/capitan pueden marcar a cualquiera (checklist en cancha).
 export async function POST(req: NextRequest) {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }

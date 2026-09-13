@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 // body: { id_jornada: string, permitir: boolean }
 // Admin activa/desactiva el "mercado de cambios" post-draft.
 export async function POST(req: NextRequest) {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion || (sesion.rol_sistema !== "admin" && sesion.rol_sistema !== "super_admin")) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }

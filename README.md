@@ -93,6 +93,37 @@ Luego en [vercel.com](https://vercel.com):
 3. Deploy. Cada push a `main` vuelve a desplegar automáticamente (mismo
    patrón que usas en tus otros proyectos).
 
+## Desplegar en Cloudflare Workers
+
+La app está configurada para Cloudflare Workers mediante OpenNext. No usa
+R2 porque sus pantallas y rutas de API leen el estado actual de Supabase.
+
+```bash
+npm ci
+npm run cf:build       # genera el Worker en .open-next
+npm run preview        # lo prueba localmente con el runtime de Cloudflare
+npm run deploy         # despliega (requiere iniciar sesión en Wrangler)
+```
+
+Para despliegues desde GitHub, crea un proyecto **Workers** en Cloudflare.
+En **Build settings** usa `npx @opennextjs/cloudflare build` como Build
+command y `npx @opennextjs/cloudflare deploy -- --keep-vars` como Deploy
+command. Configura estas variables en dos lugares: **Build variables and
+secrets** (para que Next pueda compilar) y **Variables and Secrets** del
+Worker (para que existan en runtime):
+
+| Variable | Tipo recomendado |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Variable |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Variable |
+| `SUPABASE_SERVICE_ROLE_KEY` | Secret |
+| `SESSION_SECRET` | Secret |
+
+Agrega las cuatro para producción y, si usas previews, también para el
+entorno Preview. No subas `.env.local` ni `.dev.vars`: ambos están ignorados
+por Git. Cloudflare Workers ejecuta esta app con compatibilidad de Node.js,
+necesaria para las cookies firmadas y hashes de PIN.
+
 ## Nota de seguridad (léela antes de usar esto con plata real)
 
 Este MVP resuelve el login con un hash de PIN + cookie firmada — suficiente

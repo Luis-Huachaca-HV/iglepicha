@@ -1,5 +1,8 @@
 node_modules
 .next
+.open-next
+.wrangler
 .env.local
+.dev.vars
 .DS_Store
 *.log

@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 // turno al siguiente equipo con cupo disponible. Si ya no queda cupo o
 // bolsa, cierra el draft.
 export async function POST(req: NextRequest) {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const { id_jornada, id_equipo, id_usuario } = (await req.json()) as {

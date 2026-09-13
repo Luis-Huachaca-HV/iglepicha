@@ -4,8 +4,8 @@ import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
 import { DraftClient } from "@/components/DraftClient";
 
-export default function DraftPage() {
-  const sesion = obtenerSesionActual();
+export default async function DraftPage() {
+  const sesion = await obtenerSesionActual();
   if (!sesion) redirect("/login");
 
   return (

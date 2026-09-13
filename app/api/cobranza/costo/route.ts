@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 // Guarda el costo total de la cancha y recalcula la cuota por equipo
 // (costo_total / cantidad de equipos) para todos los equipos de la jornada.
 export async function POST(req: NextRequest) {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion || (sesion.rol_sistema !== "admin" && sesion.rol_sistema !== "super_admin")) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }

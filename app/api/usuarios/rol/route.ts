@@ -15,7 +15,7 @@ const ROLES_VALIDOS: RolSistema[] = ["super_admin", "admin", "capitan", "jugador
 // otros super_admin o admin, para que un admin normal no pueda auto-
 // otorgarse más permisos de los que ya tiene.
 export async function POST(req: NextRequest) {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion || (sesion.rol_sistema !== "admin" && sesion.rol_sistema !== "super_admin")) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }

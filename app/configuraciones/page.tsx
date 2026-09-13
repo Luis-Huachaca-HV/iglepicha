@@ -4,8 +4,8 @@ import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
 import { ConfiguracionesClient } from "@/components/ConfiguracionesClient";
 
-export default function ConfiguracionesPage() {
-  const sesion = obtenerSesionActual();
+export default async function ConfiguracionesPage() {
+  const sesion = await obtenerSesionActual();
   if (!sesion) redirect("/login");
   if (sesion.rol_sistema !== "admin" && sesion.rol_sistema !== "super_admin") redirect("/dashboard");
 

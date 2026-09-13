@@ -12,7 +12,7 @@ const ATRIBUTOS = ["velocidad", "resistencia", "ataque", "defensa", "pase_corto"
 // atributo). Se guarda como su propia evaluación (upsert); el promedio
 // que ve el resto de la app sale de todas las evaluaciones que existan.
 export async function POST(req: NextRequest) {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion || !["admin", "super_admin", "capitan"].includes(sesion.rol_sistema)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }

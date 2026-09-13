@@ -4,8 +4,8 @@ import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
 import { DashboardClient } from "@/components/DashboardClient";
 
-export default function DashboardPage() {
-  const sesion = obtenerSesionActual();
+export default async function DashboardPage() {
+  const sesion = await obtenerSesionActual();
   if (!sesion) redirect("/login");
 
   return (

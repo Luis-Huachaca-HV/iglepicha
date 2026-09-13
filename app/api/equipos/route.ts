@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 // a cada equipo (el draft en sí) es la siguiente fase — acá solo se
 // fija cuántos equipos hay y quién los capitanea.
 export async function POST(req: NextRequest) {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion || (sesion.rol_sistema !== "admin" && sesion.rol_sistema !== "super_admin")) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }

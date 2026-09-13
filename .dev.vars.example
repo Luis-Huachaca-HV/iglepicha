@@ -1,0 +1,2 @@
+# Selecciona .env.local al ejecutar el Worker en modo preview.
+NEXTJS_ENV=development

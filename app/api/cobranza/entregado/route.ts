@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 // Una sola vía: una vez marcado, no se puede desmarcar (evita reversos
 // accidentales de un movimiento de dinero ya confirmado).
 export async function POST(req: NextRequest) {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion || (sesion.rol_sistema !== "admin" && sesion.rol_sistema !== "super_admin")) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }

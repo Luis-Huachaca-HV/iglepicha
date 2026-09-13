@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 // draft terminó y el admin activó "permitir_cambios_post_draft".
 // id_equipo_destino en null devuelve al jugador a la bolsa.
 export async function POST(req: NextRequest) {
-  const sesion = obtenerSesionActual();
+  const sesion = await obtenerSesionActual();
   if (!sesion || (sesion.rol_sistema !== "admin" && sesion.rol_sistema !== "super_admin")) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }
