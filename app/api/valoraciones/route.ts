@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   const statsLimpio: Record<string, number> = {};
   for (const attr of ATRIBUTOS) {
     const valor = Number(stats[attr]);
-    statsLimpio[attr] = Number.isFinite(valor) ? Math.min(10, Math.max(1, Math.round(valor))) : 5;
+    statsLimpio[attr] = Number.isFinite(valor) ? Math.min(10, Math.max(1, Math.round(valor * 10) / 10)) : 5;
   }
 
   const admin = supabaseAdmin();

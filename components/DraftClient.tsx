@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { excedenteSobreCupo } from "@/lib/draft-capacidad";
+import { colorDeEquipo } from "@/components/Avatar";
+import { CanchaVista } from "@/components/CanchaVista";
+import { FichaArrastrable, ZonaSoltar } from "@/components/DraftDnd";
 import { supabase } from "@/lib/supabase";
 import { useUsuarios, type UsuarioLista } from "@/lib/useUsuarios";
 import type { AsistenciaDraft, EquipoJornada, Jornada, SesionUsuario } from "@/lib/types";
@@ -37,6 +41,9 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
   const [candidato, setCandidato] = useState<UsuarioLista | null>(null);
   const [tradeAbierto, setTradeAbierto] = useState<string | null>(null);
   const [confirmarRecalculo, setConfirmarRecalculo] = useState(false);
+  const [vistaCancha, setVistaCancha] = useState(false);
+  const [equipoCancha, setEquipoCancha] = useState<string | null>(null);
+  const sensores = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -277,6 +284,16 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
     if (res.ok) setJornada(data.jornada);
   }
 
+  function soltarJugador(event: DragEndEvent) {
+    const idUsuario = String(event.active.id);
+    const destino = event.over?.id ? String(event.over.id) : null;
+    if (!destino) return;
+    const idEquipo = destino === "bolsa" ? null : destino.replace(/^equipo:/, "");
+    const actual = asistenciaPorUsuario[idUsuario]?.id_equipo ?? null;
+    if (actual === idEquipo) return;
+    void mover(idUsuario, idEquipo);
+  }
+
   async function mover(idUsuario: string, idEquipoDestino: string | null) {
     if (!jornada) return;
     setTradeAbierto(null);
@@ -324,6 +341,52 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
             </p>
           )}
         </div>
+        <button
+          onClick={() => {
+            setVistaCancha((v) => !v);
+            setEquipoCancha((actual) => actual ?? equipos[0]?.id_equipo ?? null);
+          }}
+          className="self-start rounded-pill border border-pitch-700 px-3 py-2 text-xs font-medium text-mist"
+        >
+          {vistaCancha ? "Ver cupos" : "Ver cancha"}
+        </button>
+        {vistaCancha ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex gap-2 overflow-x-auto">
+              {equipos.map((e, indice) => (
+                <button
+                  key={e.id_equipo}
+                  onClick={() => setEquipoCancha(e.id_equipo)}
+                  className={`whitespace-nowrap rounded-pill px-3 py-2 text-xs font-bold ${
+                    (equipoCancha ?? equipos[0]?.id_equipo) === e.id_equipo ? "text-pitch-950" : "border border-pitch-700 text-mist"
+                  }`}
+                  style={
+                    (equipoCancha ?? equipos[0]?.id_equipo) === e.id_equipo
+                      ? { backgroundColor: colorDeEquipo(indice) }
+                      : undefined
+                  }
+                >
+                  {usuariosMap[e.id_capitan ?? ""]?.nombre ?? "Equipo"}
+                </button>
+              ))}
+            </div>
+            {equipos.map((e, indice) =>
+              (equipoCancha ?? equipos[0]?.id_equipo) === e.id_equipo ? (
+                <CanchaVista
+                  key={e.id_equipo}
+                  nombreEquipo={`Equipo de ${usuariosMap[e.id_capitan ?? ""]?.nombre ?? "?"}`}
+                  color={colorDeEquipo(indice)}
+                  jugadores={rosterDe(e.id_equipo).map((u) => ({
+                    id: u.id_usuario,
+                    nombre: u.nombre,
+                    posicion: u.posicion,
+                    valoracion: ratings[u.id_usuario] ? ratings[u.id_usuario] : null,
+                  }))}
+                />
+              ) : null
+            )}
+          </div>
+        ) : (
         <ul className="flex flex-col gap-3">
           {equipos.map((e) => (
             <li key={e.id_equipo} className="flex items-center justify-between rounded border border-pitch-800 bg-pitch-900 px-4 py-3">
@@ -343,6 +406,7 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
             </li>
           ))}
         </ul>
+        )}
         {error && <p className="text-sm text-card-red">{error}</p>}
         {esAdmin ? (
           <>
@@ -387,16 +451,66 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
         ) : (
           <p className="mt-1 text-sm text-turf-400">Draft finalizado</p>
         )}
+        <button
+          onClick={() => {
+            setVistaCancha((v) => !v);
+            setEquipoCancha((actual) => actual ?? equipos[0]?.id_equipo ?? null);
+          }}
+          className="mt-3 rounded-pill border border-pitch-700 px-3 py-2 text-xs font-medium text-mist"
+        >
+          {vistaCancha ? "Ver listas" : "Ver cancha"}
+        </button>
       </div>
 
-      <div className="flex flex-col gap-3">
+      {vistaCancha && (
+        <div className="flex flex-col gap-3">
+          <div className="flex gap-2 overflow-x-auto">
+            {equipos.map((e, indice) => (
+              <button
+                key={e.id_equipo}
+                onClick={() => setEquipoCancha(e.id_equipo)}
+                className={`whitespace-nowrap rounded-pill px-3 py-2 text-xs font-bold ${
+                  (equipoCancha ?? equipos[0]?.id_equipo) === e.id_equipo ? "text-pitch-950" : "border border-pitch-700 text-mist"
+                }`}
+                style={
+                  (equipoCancha ?? equipos[0]?.id_equipo) === e.id_equipo
+                    ? { backgroundColor: colorDeEquipo(indice) }
+                    : undefined
+                }
+              >
+                {usuariosMap[e.id_capitan ?? ""]?.nombre ?? "Equipo"}
+              </button>
+            ))}
+          </div>
+          {equipos.map((e, indice) =>
+            (equipoCancha ?? equipos[0]?.id_equipo) === e.id_equipo ? (
+              <CanchaVista
+                key={e.id_equipo}
+                nombreEquipo={`Equipo de ${usuariosMap[e.id_capitan ?? ""]?.nombre ?? "?"}`}
+                color={colorDeEquipo(indice)}
+                jugadores={rosterDe(e.id_equipo).map((u) => ({
+                  id: u.id_usuario,
+                  nombre: u.nombre,
+                  posicion: u.posicion,
+                  valoracion: ratings[u.id_usuario] ? ratings[u.id_usuario] : null,
+                }))}
+              />
+            ) : null
+          )}
+        </div>
+      )}
+
+      <DndContext sensors={sensores} onDragEnd={soltarJugador}>
+      <div className={`flex flex-col gap-3 ${vistaCancha ? "hidden" : ""}`}>
         {equipos.map((e) => {
           const roster = rosterDe(e.id_equipo);
           const { avg, sinClasificar, total } = promedioEquipo(e.id_equipo);
           const enTurno = e.id_equipo === jornada.draft_turno_equipo_id;
+          const puedeArrastrar = esAdmin && jornada.estado === "pendiente" && jornada.draft_estado === "finalizado";
           return (
-            <div
+            <ZonaSoltar
               key={e.id_equipo}
+              id={`equipo:${e.id_equipo}`}
               className={`rounded border bg-pitch-900 p-4 transition-colors ${enTurno ? "border-floodlight" : "border-pitch-800"}`}
             >
               <div className="mb-2 flex items-center justify-between gap-2">
@@ -418,25 +532,26 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
               <ul className="flex flex-wrap gap-1.5">
                 {roster.map((u) => (
                   <li key={u.id_usuario}>
-                    <button
-                      disabled={!esAdmin || !jornada.permitir_cambios_post_draft || jornada.draft_estado !== "finalizado"}
-                      onClick={() => setTradeAbierto(u.id_usuario)}
-                      className="rounded-pill bg-pitch-800 px-3 py-2 text-xs disabled:opacity-100"
-                    >
-                      {u.nombre}
-                    </button>
+                    <FichaArrastrable
+                      id={u.id_usuario}
+                      nombre={u.nombre}
+                      disabled={!puedeArrastrar}
+                      onClick={() => {
+                        if (puedeArrastrar) setTradeAbierto(u.id_usuario);
+                      }}
+                    />
                   </li>
                 ))}
                 {roster.length === 0 && <li className="text-xs text-mist">Sin jugadores aún</li>}
               </ul>
-            </div>
+            </ZonaSoltar>
           );
         })}
       </div>
 
-      {(jornada.draft_estado === "en_curso" || bolsa.length > 0) && (
-        <div>
-          <h2 className="mb-2 font-display text-lg font-bold">Bolsa ({bolsa.length})</h2>
+      {(jornada.draft_estado === "en_curso" || jornada.draft_estado === "finalizado" || bolsa.length > 0) && (
+        <ZonaSoltar id="bolsa" className="rounded-xl">
+          <h2 className="mb-2 font-display text-lg font-bold">Bolsa / banquillo ({bolsa.length})</h2>
           {jornada.draft_estado === "en_curso" && (
             <p className="mb-2 text-xs text-mist">
               Si los cupos se llenan, quien siga acá entra al azar a un equipo. Ese equipo juega con un jugador más.
@@ -471,8 +586,12 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
               Solo {usuariosMap[equipoEnTurno?.id_capitan ?? ""]?.nombre ?? "el capitán en turno"} puede elegir ahora.
             </p>
           )}
-        </div>
+          {esAdmin && jornada.draft_estado === "finalizado" && jornada.estado === "pendiente" && (
+            <p className="mt-2 text-xs text-mist">Arrastra una ficha a otro equipo o suéltala acá para mandarla al banquillo. El promedio se actualiza al soltar.</p>
+          )}
+        </ZonaSoltar>
       )}
+      </DndContext>
 
       {esAdmin && jornada.estado === "pendiente" && (
         <div className="flex flex-col gap-2">

@@ -29,6 +29,7 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
   const [asistencias, setAsistencias] = useState<AsistenciaDraft[]>([]);
   const { usuarios } = useUsuarios();
   const [costoInput, setCostoInput] = useState("");
+  const [precioTicket, setPrecioTicket] = useState("0");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmarPago, setConfirmarPago] = useState<{ id_usuario: string; nombre: string } | null>(null);
@@ -143,7 +144,11 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
     const res = await fetch("/api/cobranza/costo", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id_jornada: jornada.id_jornada, costo_total: valor }),
+      body: JSON.stringify({
+        id_jornada: jornada.id_jornada,
+        costo_total: valor,
+        precio_ticket: Number(precioTicket) || 0,
+      }),
     });
     const data = await res.json();
     setGuardando(false);
@@ -178,10 +183,14 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
 
   if (!jornada) return <p className="text-mist">Cargando…</p>;
 
+  const presentes = asistencias.filter((a) => a.presente).length;
+  const cuotaBase = presentes > 0 ? (jornada.costo_total || 0) / presentes : 0;
+  const extraTicket = Number(precioTicket) || 0;
+  const cuotaDe = (ticket: boolean | undefined) => cuotaBase + (ticket ? extraTicket : 0);
+
   const totalRecaudado = equiposVisibles.reduce((suma, e) => {
     const roster = rosterDe(e.id_equipo);
-    const cuotaJugador = roster.length > 0 ? (e.cuota_equipo || 0) / roster.length : 0;
-    return suma + roster.filter((a) => a.pago_realizado).length * cuotaJugador;
+    return suma + roster.filter((a) => a.pago_realizado).reduce((parcial, a) => parcial + cuotaDe(a.ticket_adicional), 0);
   }, 0);
 
   const todoConcluido = equipos.length > 0 && equipos.every((e) => e.pago_entregado_admin);
@@ -222,6 +231,19 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
               className="w-24 rounded border border-pitch-700 bg-pitch-950 px-2 py-2 text-center disabled:opacity-40"
             />
           </label>
+          <label className="mt-3 flex items-center justify-between text-sm">
+            Precio de cada ticket (S/)
+            <input
+              type="number"
+              min={0}
+              step="0.5"
+              value={precioTicket}
+              onChange={(e) => setPrecioTicket(e.target.value)}
+              disabled={bloqueado}
+              className="w-24 rounded border border-pitch-700 bg-pitch-950 px-2 py-2 text-center disabled:opacity-40"
+            />
+          </label>
+          <p className="mt-2 text-xs text-mist">Cuota = costo de la cancha / asistentes, más el ticket verde de quien lo marcó.</p>
           {error && <p className="mt-2 text-sm text-card-red">{error}</p>}
           <button
             onClick={guardarCosto}
@@ -236,7 +258,6 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
       <div className="flex flex-col gap-4">
         {equiposVisibles.map((e) => {
           const roster = rosterDe(e.id_equipo);
-          const cuotaJugador = roster.length > 0 ? (e.cuota_equipo || 0) / roster.length : 0;
           const pagados = roster.filter((a) => a.pago_realizado).length;
           const todosPagaron = roster.length > 0 && pagados === roster.length;
           return (
@@ -256,7 +277,8 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
                   <li key={a.id_usuario} className="flex items-center justify-between py-2">
                     <span className="text-sm">
                       {usuariosMap[a.id_usuario]?.nombre ?? "?"}
-                      <span className="ml-2 text-xs text-mist">{soles(cuotaJugador)}</span>
+                      <span className="ml-2 text-xs text-mist">{soles(cuotaDe(a.ticket_adicional))}</span>
+                      {a.ticket_adicional && <span className="ml-2 text-xs font-bold text-turf-400">Ticket</span>}
                     </span>
                     <button
                       disabled={bloqueado || !puedeMarcarPago || a.pago_realizado}

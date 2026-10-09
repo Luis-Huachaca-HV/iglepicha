@@ -2,23 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Shield, Timer, Trophy, Users, Wallet } from "lucide-react";
 import type { RolSistema } from "@/lib/types";
 
 const TABS = [
-  { href: "/dashboard", label: "Dashboard", disponible: true },
-  { href: "/partidos", label: "Partidos", disponible: true },
-  { href: "/draft", label: "Draft", disponible: true },
-  { href: "/jugadores", label: "Jugadores", disponible: true },
-  { href: "/cobranza", label: "Cobranza", disponible: true },
-  { href: "/configuraciones", label: "Config", disponible: true },
+  { href: "/draft", label: "Equipos", icono: Shield },
+  { href: "/jugadores", label: "Jugadores", icono: Users },
+  { href: "/partidos", label: "Partidos", icono: Timer },
+  { href: "/estadisticas", label: "Estadísticas", icono: Trophy },
+  { href: "/cobranza", label: "Cobranza", icono: Wallet },
 ];
 
-// Tabs visibles por rol, según el spec original.
 const ACCESO_POR_ROL: Record<RolSistema, string[]> = {
-  super_admin: ["/dashboard", "/partidos", "/draft", "/jugadores", "/cobranza", "/configuraciones"],
-  admin: ["/dashboard", "/partidos", "/draft", "/jugadores", "/cobranza", "/configuraciones"],
-  capitan: ["/dashboard", "/partidos", "/draft", "/jugadores", "/cobranza"],
-  jugador_registrado: ["/dashboard", "/partidos", "/jugadores"],
+  super_admin: TABS.map((t) => t.href),
+  admin: TABS.map((t) => t.href),
+  capitan: TABS.map((t) => t.href),
+  jugador_registrado: ["/partidos", "/jugadores", "/estadisticas"],
 };
 
 export function BottomNav({ rol }: { rol: RolSistema }) {
@@ -34,24 +33,18 @@ export function BottomNav({ rol }: { rol: RolSistema }) {
       <ul className="mx-auto flex max-w-md">
         {tabsVisibles.map((tab) => {
           const activo = pathname === tab.href;
+          const Icono = tab.icono;
           return (
             <li key={tab.href} className="flex-1">
-              {tab.disponible ? (
-                <Link
-                  href={tab.href}
-                  className={`flex min-h-[3.25rem] flex-col items-center justify-center gap-1 py-2 text-[11px] font-medium ${
-                    activo ? "text-floodlight" : "text-mist"
-                  }`}
-                >
-                  <span className={`h-1 w-6 rounded-pill ${activo ? "bg-floodlight" : "bg-transparent"}`} />
-                  {tab.label}
-                </Link>
-              ) : (
-                <span className="flex min-h-[3.25rem] flex-col items-center justify-center gap-1 py-2 text-[11px] font-medium text-pitch-700">
-                  <span className="h-1 w-6 rounded-pill bg-transparent" />
-                  {tab.label}
-                </span>
-              )}
+              <Link
+                href={tab.href}
+                className={`flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium ${
+                  activo ? "text-turf-400" : "text-mist"
+                }`}
+              >
+                <Icono size={18} strokeWidth={activo ? 2.4 : 1.8} />
+                {tab.label}
+              </Link>
             </li>
           );
         })}

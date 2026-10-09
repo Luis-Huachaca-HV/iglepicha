@@ -80,6 +80,7 @@ create table asistencia_draft (
   id_equipo uuid references equipos_jornada(id_equipo),
   presente boolean not null default false,
   pago_realizado boolean not null default false,
+  ticket_adicional boolean not null default false,
   unique (id_jornada, id_usuario)
 );
 

@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { House, Settings } from "lucide-react";
 import type { SesionUsuario } from "@/lib/types";
 
 const ETIQUETA_ROL: Record<string, string> = {
@@ -25,6 +27,14 @@ export function TopBar({ sesion, estadoLabel }: { sesion: SesionUsuario; estadoL
       style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
     >
       <div className="flex items-center gap-2">
+        <Link href="/dashboard" className="rounded-full p-2 text-mist" aria-label="Inicio">
+          <House size={18} />
+        </Link>
+        {(sesion.rol_sistema === "admin" || sesion.rol_sistema === "super_admin") && (
+          <Link href="/configuraciones" className="rounded-full p-2 text-mist" aria-label="Configuraciones">
+            <Settings size={18} />
+          </Link>
+        )}
         {estadoLabel && (
           <span className="flex items-center gap-1.5 rounded-pill bg-pitch-800 px-2.5 py-1 text-xs font-medium text-floodlight">
             <span className="h-1.5 w-1.5 animate-pulseDot rounded-full bg-floodlight" />

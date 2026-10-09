@@ -6,23 +6,23 @@ const config: Config = {
     extend: {
       colors: {
         pitch: {
-          950: "#0B1710", // night-match background
-          900: "#122117",
-          800: "#1B3324",
-          700: "#234A2F",
+          950: "#020617",
+          900: "#0f172a",
+          800: "#1e293b",
+          700: "#334155",
         },
         turf: {
-          500: "#2F9E44", // primary grass green
-          600: "#278A3B",
-          400: "#4CB85C",
+          500: "#16a34a",
+          600: "#15803d",
+          400: "#22c55e",
         },
-        chalk: "#F3F6EE", // line-marking white
-        floodlight: "#FFB100", // amber accent - live / timers
+        chalk: "#f1f5f9",
+        floodlight: "#eab308",
         card: {
-          yellow: "#F4D35E",
-          red: "#E63946",
+          yellow: "#eab308",
+          red: "#ef4444",
         },
-        mist: "#8FA396", // secondary text on dark
+        mist: "#94a3b8",
       },
       fontFamily: {
         display: ["var(--font-display)"],

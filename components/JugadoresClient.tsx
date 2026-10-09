@@ -3,12 +3,21 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { RadarChart, ETIQUETAS } from "@/components/RadarChart";
+import { Avatar, colorDeEquipo } from "@/components/Avatar";
 import { Toast } from "@/components/Toast";
 import { useUsuarios } from "@/lib/useUsuarios";
 import { useToast } from "@/lib/useToast";
 import type { AsistenciaDraft, EquipoJornada, Jornada, Posicion, RolSistema, SesionUsuario } from "@/lib/types";
 
 const POSICIONES: Posicion[] = ["POR", "DEF", "MC", "DEL"];
+
+const CHIPS_POSICION: { id: string; label: string; guarda: Posicion }[] = [
+  { id: "POR", label: "Portero", guarda: "POR" },
+  { id: "DEF", label: "Defensa", guarda: "DEF" },
+  { id: "LAT", label: "Lateral", guarda: "DEF" },
+  { id: "MED", label: "Medio", guarda: "MC" },
+  { id: "DEL", label: "Delantero", guarda: "DEL" },
+];
 
 type FiltroEdad = "todos" | "menor18" | "18a29" | "30mas";
 
@@ -48,12 +57,16 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
   const [asistencias, setAsistencias] = useState<Record<string, AsistenciaDraft>>({});
   const [valoraciones, setValoraciones] = useState<Record<string, Record<string, number>>>({});
   const [filtro, setFiltro] = useState<FiltroEdad>("todos");
+  const [filtroPosicion, setFiltroPosicion] = useState<string>("todas");
   const [seleccionado, setSeleccionado] = useState<string | null>(null);
   const [modalCapitanes, setModalCapitanes] = useState(false);
   const [capitanesElegidos, setCapitanesElegidos] = useState<string[]>([]);
   const [modalNuevoJugador, setModalNuevoJugador] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevaEdad, setNuevaEdad] = useState("");
+  const [pasoNuevo, setPasoNuevo] = useState<1 | 2 | 3>(1);
+  const [chipsNuevo, setChipsNuevo] = useState<string[]>([]);
+  const [valoracionNueva, setValoracionNueva] = useState(6);
   const [errorNuevo, setErrorNuevo] = useState<string | null>(null);
   const [guardandoNuevo, setGuardandoNuevo] = useState(false);
   const { mensaje: mensajeToast, mostrarToast } = useToast();
@@ -64,7 +77,7 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
   const puedeMarcarAOtros = ["admin", "super_admin", "capitan"].includes(sesion.rol_sistema);
   const esAdmin = sesion.rol_sistema === "admin" || sesion.rol_sistema === "super_admin";
   const esCapitan = sesion.rol_sistema === "capitan";
-  const jornadaBloqueada = jornada?.estado !== "pendiente";
+  const jornadaBloqueada = !!jornada && jornada.estado !== "pendiente";
   const miEquipo = equipos.find((e) => e.id_capitan === sesion.id_usuario) ?? null;
 
   const cargarAsistenciasYEquipos = useCallback(async (idJornada: string) => {
@@ -207,8 +220,15 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
   }
 
   const usuariosFiltrados = useMemo(
-    () => usuarios.filter((u) => cumpleFiltro(u.edad, filtro)),
-    [usuarios, filtro]
+    () =>
+      usuarios.filter((u) => {
+        if (!cumpleFiltro(u.edad, filtro)) return false;
+        if (filtroPosicion === "todas") return true;
+        if (filtroPosicion === "MED") return u.posicion === "MC";
+        if (filtroPosicion === "LAT") return u.posicion === "DEF";
+        return u.posicion === filtroPosicion;
+      }),
+    [usuarios, filtro, filtroPosicion]
   );
 
   const presentes = useMemo(() => usuarios.filter((u) => asistencias[u.id_usuario]?.presente), [usuarios, asistencias]);
@@ -286,11 +306,55 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
       setErrorNuevo(data.error ?? "No se pudo crear");
       return;
     }
+    const idNuevo = data.usuario?.id_usuario as string | undefined;
+    const chip = CHIPS_POSICION.find((c) => c.id === chipsNuevo[0]);
+    if (idNuevo && chip) {
+      await fetch("/api/usuarios/posicion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_usuario: idNuevo, posicion: chip.guarda }),
+      });
+    }
+    if (idNuevo && idNuevo !== sesion.id_usuario) {
+      const stats = Object.fromEntries(ETIQUETAS.map((e) => [e.clave, valoracionNueva]));
+      await fetch("/api/valoraciones", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_evaluado: idNuevo, stats }),
+      });
+    }
     recargarUsuarios();
     setModalNuevoJugador(false);
     setNuevoNombre("");
     setNuevaEdad("");
+    setPasoNuevo(1);
+    setChipsNuevo([]);
+    setValoracionNueva(6);
     mostrarToast(`✓ ${data.usuario?.nombre ?? "Jugador"} agregado`);
+  }
+
+  async function marcarTicket(idUsuario: string, ticket: boolean) {
+    if (!jornada) return;
+    const anterior = asistencias[idUsuario];
+    setAsistencias((prev) => ({
+      ...prev,
+      [idUsuario]: {
+        ...(prev[idUsuario] as AsistenciaDraft),
+        id_usuario: idUsuario,
+        id_jornada: jornada.id_jornada,
+        ticket_adicional: ticket,
+      } as AsistenciaDraft,
+    }));
+    const res = await fetch("/api/asistencia/ticket", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_jornada: jornada.id_jornada, id_usuario: idUsuario, ticket_adicional: ticket }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setAsistencias((prev) => ({ ...prev, [idUsuario]: anterior as AsistenciaDraft }));
+      mostrarToast(data?.error ?? "No se pudo marcar el ticket");
+    }
   }
 
   async function confirmarCapitanes() {
@@ -313,6 +377,20 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
         <p className="text-sm text-mist">
           {presentes.length} de {usuarios.length} marcados presentes
         </p>
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto">
+        {[{ id: "todas", label: "Posición" }, ...CHIPS_POSICION.map((c) => ({ id: c.id, label: c.label }))].map((f) => (
+          <button
+            key={f.id}
+            onClick={() => setFiltroPosicion(filtroPosicion === f.id ? "todas" : f.id)}
+            className={`whitespace-nowrap rounded-pill px-3 py-2 text-xs font-medium ${
+              filtroPosicion === f.id ? "bg-floodlight text-pitch-950" : "border border-pitch-700 text-mist"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
 
       <div className="flex gap-2 overflow-x-auto">
@@ -358,32 +436,53 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
           const enEquipo = !!asistencias[u.id_usuario]?.id_equipo;
           const bloqueadoQuitar = presente && enEquipo;
           return (
-            <li key={u.id_usuario} className="flex items-center justify-between py-2">
-              <button className="flex flex-1 items-center gap-3 py-1.5 text-left" onClick={() => { setSeleccionado(u.id_usuario); setEditandoValoracion(false); }}>
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-pitch-800 font-display text-sm font-bold">
-                  {u.nombre.charAt(0).toUpperCase()}
-                </span>
-                <span>
-                  <span className="block text-sm font-medium">{u.nombre}</span>
-                  <span className="block text-xs text-mist">
+            <li key={u.id_usuario} className="flex items-center justify-between gap-2 py-2">
+              <button className="flex min-w-0 flex-1 items-center gap-3 py-1.5 text-left" onClick={() => { setSeleccionado(u.id_usuario); setEditandoValoracion(false); }}>
+                <Avatar
+                  nombre={u.nombre}
+                  color={
+                    equipos.findIndex((e) => e.id_equipo === asistencias[u.id_usuario]?.id_equipo) >= 0
+                      ? colorDeEquipo(equipos.findIndex((e) => e.id_equipo === asistencias[u.id_usuario]?.id_equipo))
+                      : "#334155"
+                  }
+                  anillo={presente ? "asistencia" : undefined}
+                />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">{u.nombre}</span>
+                  <span className="block truncate text-xs text-mist">
                     {u.edad ? `${u.edad} años` : "Edad no registrada"}
                     {u.posicion ? ` · ${u.posicion}` : ""} · {nombreEquipo(asistencias[u.id_usuario]?.id_equipo)}
                   </span>
                 </span>
               </button>
-              <button
-                disabled={jornadaBloqueada || (!puedeMarcarAOtros && sesion.id_usuario !== u.id_usuario) || bloqueadoQuitar}
-                onClick={() =>
-                  setConfirmarAsistencia({ id_usuario: u.id_usuario, nombre: u.nombre, presente: !presente })
-                }
-                title={bloqueadoQuitar ? "Ya está en un equipo del draft — no se puede quitar" : undefined}
-                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded border-2 transition ${
-                  presente ? "border-turf-500 bg-turf-500" : "border-pitch-700 bg-transparent"
-                } disabled:opacity-60`}
-                aria-label={presente ? "Marcar ausente" : "Marcar presente"}
-              >
-                {presente && <span className={`text-lg ${bloqueadoQuitar ? "text-pitch-950/70" : "text-pitch-950"}`}>{bloqueadoQuitar ? "🔒" : "✓"}</span>}
-              </button>
+              <div className="flex shrink-0 gap-1.5">
+                <button
+                  disabled={jornadaBloqueada || (!puedeMarcarAOtros && sesion.id_usuario !== u.id_usuario) || bloqueadoQuitar}
+                  onClick={() =>
+                    setConfirmarAsistencia({ id_usuario: u.id_usuario, nombre: u.nombre, presente: !presente })
+                  }
+                  title="Asistencia"
+                  className={`flex h-11 w-11 items-center justify-center rounded-full border-2 transition ${
+                    presente ? "border-floodlight bg-floodlight text-pitch-950" : "border-pitch-700 bg-transparent text-mist"
+                  } disabled:opacity-60`}
+                  aria-label={presente ? "Marcar ausente" : "Marcar presente"}
+                >
+                  {presente ? (bloqueadoQuitar ? "🔒" : "✓") : ""}
+                </button>
+                <button
+                  disabled={jornadaBloqueada || (!puedeMarcarAOtros && sesion.id_usuario !== u.id_usuario)}
+                  onClick={() => marcarTicket(u.id_usuario, !asistencias[u.id_usuario]?.ticket_adicional)}
+                  title="Ticket"
+                  className={`flex h-11 w-11 items-center justify-center rounded-full border-2 transition ${
+                    asistencias[u.id_usuario]?.ticket_adicional
+                      ? "border-turf-400 bg-turf-500 text-pitch-950"
+                      : "border-pitch-700 bg-transparent text-mist"
+                  } disabled:opacity-60`}
+                  aria-label="Ticket adicional"
+                >
+                  {asistencias[u.id_usuario]?.ticket_adicional ? "✓" : ""}
+                </button>
+              </div>
             </li>
           );
         })}
@@ -513,43 +612,108 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
             className="w-full max-w-md rounded-t-2xl border-t border-pitch-700 bg-pitch-900 p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="mb-4 font-display text-xl font-bold">Agregar jugador</h2>
-            <div className="flex flex-col gap-3">
-              <label className="flex flex-col gap-1 text-sm">
-                Nombre
-                <input
-                  type="text"
-                  value={nuevoNombre}
-                  onChange={(e) => setNuevoNombre(e.target.value)}
-                  placeholder="Ej. Diego Ramírez"
-                  className="rounded border border-pitch-700 bg-pitch-950 px-3 py-2.5 text-base text-chalk"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                Edad (opcional)
-                <input
-                  type="number"
-                  min={1}
-                  value={nuevaEdad}
-                  onChange={(e) => setNuevaEdad(e.target.value)}
-                  placeholder="Ej. 27"
-                  className="rounded border border-pitch-700 bg-pitch-950 px-3 py-2.5 text-base text-chalk"
-                />
-              </label>
-            </div>
+            <h2 className="mb-1 font-display text-xl font-bold">Agregar jugador</h2>
+            <p className="mb-4 text-xs text-mist">Paso {pasoNuevo} de 3</p>
+            {pasoNuevo === 1 && (
+              <div className="flex flex-col gap-3">
+                <label className="flex flex-col gap-1 text-sm">
+                  Nombre
+                  <input
+                    type="text"
+                    value={nuevoNombre}
+                    onChange={(e) => setNuevoNombre(e.target.value)}
+                    placeholder="Ej. Diego Ramírez"
+                    className="rounded border border-pitch-700 bg-pitch-950 px-3 py-2.5 text-base text-chalk"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  Edad (opcional)
+                  <input
+                    type="number"
+                    min={1}
+                    value={nuevaEdad}
+                    onChange={(e) => setNuevaEdad(e.target.value)}
+                    placeholder="Ej. 27"
+                    className="rounded border border-pitch-700 bg-pitch-950 px-3 py-2.5 text-base text-chalk"
+                  />
+                </label>
+              </div>
+            )}
+            {pasoNuevo === 2 && (
+              <div className="flex flex-wrap gap-2">
+                {CHIPS_POSICION.map((chip) => {
+                  const activo = chipsNuevo.includes(chip.id);
+                  return (
+                    <button
+                      key={chip.id}
+                      onClick={() =>
+                        setChipsNuevo((prev) => (activo ? prev.filter((id) => id !== chip.id) : [...prev, chip.id]))
+                      }
+                      className={`rounded-pill px-3 py-2 text-sm font-medium ${
+                        activo ? "bg-turf-500 text-pitch-950" : "border border-pitch-700 text-mist"
+                      }`}
+                    >
+                      {chip.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {pasoNuevo === 3 && (
+              <div className="flex items-center justify-center gap-4">
+                <button
+                  onClick={() => setValoracionNueva((v) => Math.max(1, Math.round((v - 0.5) * 10) / 10))}
+                  className="h-12 w-12 rounded-full border border-pitch-700 text-xl"
+                >
+                  −
+                </button>
+                <span className="font-display text-4xl font-bold text-turf-400">{valoracionNueva.toFixed(1)}</span>
+                <button
+                  onClick={() => setValoracionNueva((v) => Math.min(10, Math.round((v + 0.5) * 10) / 10))}
+                  className="h-12 w-12 rounded-full border border-pitch-700 text-xl"
+                >
+                  +
+                </button>
+              </div>
+            )}
             {errorNuevo && <p className="mt-2 text-sm text-card-red">{errorNuevo}</p>}
-            <p className="mt-3 text-xs text-mist">
-              Entra directo por nombre, sin PIN. Si necesita ser admin, capitán o tener PIN, cámbialo desde
-              Configuraciones.
-            </p>
+            <div className="mt-4 flex gap-2">
+              {pasoNuevo > 1 && (
+                <button onClick={() => setPasoNuevo((p) => (p - 1) as 1 | 2 | 3)} className="flex-1 rounded-pill border border-pitch-700 py-3 text-sm">
+                  Atrás
+                </button>
+              )}
+              {pasoNuevo < 3 ? (
+                <button
+                  onClick={() => {
+                    if (pasoNuevo === 1 && !nuevoNombre.trim()) {
+                      setErrorNuevo("Ponle un nombre");
+                      return;
+                    }
+                    setErrorNuevo(null);
+                    setPasoNuevo((p) => (p + 1) as 2 | 3);
+                  }}
+                  className="flex-1 rounded-pill bg-turf-500 py-3 font-bold text-pitch-950"
+                >
+                  Siguiente
+                </button>
+              ) : (
+                <button
+                  onClick={crearJugador}
+                  disabled={guardandoNuevo}
+                  className="flex-1 rounded-pill bg-turf-500 py-3 font-display font-bold text-pitch-950 disabled:opacity-50"
+                >
+                  Guardar jugador
+                </button>
+              )}
+            </div>
             <button
-              onClick={crearJugador}
-              disabled={guardandoNuevo}
-              className="mt-4 w-full rounded-pill bg-turf-500 py-3.5 font-display font-bold text-pitch-950 disabled:opacity-50"
+              onClick={() => {
+                setModalNuevoJugador(false);
+                setPasoNuevo(1);
+              }}
+              className="mt-2 w-full rounded-pill border border-pitch-700 py-3 text-sm"
             >
-              Guardar jugador
-            </button>
-            <button onClick={() => setModalNuevoJugador(false)} className="mt-2 w-full rounded-pill border border-pitch-700 py-3 text-sm">
               Cancelar
             </button>
           </div>

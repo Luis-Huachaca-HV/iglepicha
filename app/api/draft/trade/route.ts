@@ -9,9 +9,10 @@ export const dynamic = "force-dynamic";
 
 // POST /api/draft/trade
 // body: { id_jornada: string, id_usuario: string, id_equipo_destino: string | null }
-// Mueve a un jugador de equipo. Solo admin/super_admin, y solo si el
-// draft terminó y el admin activó "permitir_cambios_post_draft".
-// id_equipo_destino en null devuelve al jugador a la bolsa.
+// Mueve a un jugador de equipo. Solo admin/super_admin, con la jornada
+// todavía pendiente y el draft ya cerrado. id_equipo_destino en null
+// lo devuelve a la bolsa. No hay tope de cupo: si el destino se pasa,
+// el cupo de ese equipo crece.
 export async function POST(req: NextRequest) {
   const sesion = await obtenerSesionActual();
   if (!sesion || (sesion.rol_sistema !== "admin" && sesion.rol_sistema !== "super_admin")) {
@@ -29,8 +30,8 @@ export async function POST(req: NextRequest) {
 
   const admin = supabaseAdmin();
   const { data: jornada } = await admin.from("jornadas").select("*").eq("id_jornada", id_jornada).single();
-  if (!jornada || jornada.draft_estado !== "finalizado" || !jornada.permitir_cambios_post_draft) {
-    return NextResponse.json({ error: "Los cambios post-draft no están habilitados" }, { status: 400 });
+  if (!jornada || jornada.estado !== "pendiente" || jornada.draft_estado !== "finalizado") {
+    return NextResponse.json({ error: "Solo se pueden mover jugadores cuando el draft ya terminó y la jornada no empezó." }, { status: 400 });
   }
 
   const { data, error } = await admin
