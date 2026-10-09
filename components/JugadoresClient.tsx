@@ -175,7 +175,7 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
       });
 
     let res = await intentar(jornada.id_jornada);
-    let data = res.ok ? null : await res.json().catch(() => ({}));
+    let data = await res.json().catch(() => ({}));
 
     // Hasta 2 reintentos silenciosos si la jornada local estaba vieja —
     // en cada uno se vuelve a pedir cuál es la jornada real antes de
@@ -185,12 +185,14 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
       const fresca = await cargarJornada();
       if (!fresca) break;
       res = await intentar(fresca.id_jornada);
-      data = res.ok ? null : await res.json().catch(() => ({}));
+      data = await res.json().catch(() => ({}));
     }
 
     if (!res.ok) {
       setAsistencias((prev) => ({ ...prev, [idUsuario]: anterior as AsistenciaDraft }));
       mostrarToast(data?.error ?? "No se pudo actualizar la asistencia");
+    } else if (data?.advertencia) {
+      mostrarToast(data.advertencia);
     }
   }
 

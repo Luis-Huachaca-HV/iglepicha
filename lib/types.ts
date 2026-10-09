@@ -40,6 +40,8 @@ export interface EquipoJornada {
   color_nombre: string | null;
   cuota_equipo: number;
   cupo_max: number | null;
+  /** Cupo que definió el admin. cupo_max puede ser mayor si hubo un sobrante. */
+  cupo_base?: number | null;
   orden_turno: number | null;
   orden_cola: number | null;
   pago_entregado_admin: boolean;

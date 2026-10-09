@@ -57,7 +57,9 @@ create table equipos_jornada (
   id_capitan uuid references usuarios(id_usuario),
   color_nombre text,
   cuota_equipo numeric(10,2) default 0,
-  -- Draft: cupo máximo de jugadores y orden en la ronda de turnos
+  -- Draft: cupo que pidió el admin, y el cupo real (puede ser mayor si
+  -- sobró gente y un equipo quedó en N+1). orden en la ronda de turnos.
+  cupo_base int,
   cupo_max int,
   orden_turno int,
   -- Partidos: posición en la cola de "el que gana se queda" (null = jugando o sin iniciar cola)

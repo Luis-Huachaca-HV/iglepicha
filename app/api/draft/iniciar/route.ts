@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { fijarCupos } from "@/lib/draft-asignar";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { obtenerSesionActual } from "@/lib/session";
 
@@ -36,14 +37,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No hay suficientes equipos creados" }, { status: 400 });
   }
 
-  // Fija cupo_max y orden_turno (por el orden en que ya vienen = creación)
-  for (let i = 0; i < equipos.length; i++) {
-    const equipo = equipos[i];
-    const cupo = cupos[equipo.id_equipo];
-    if (!cupo || cupo < 1) {
-      return NextResponse.json({ error: `Falta cupo para un equipo` }, { status: 400 });
-    }
-    await admin.from("equipos_jornada").update({ cupo_max: cupo, orden_turno: i }).eq("id_equipo", equipo.id_equipo);
+  const cuposFijados = await fijarCupos(admin, equipos, cupos);
+  if (cuposFijados.error) {
+    return NextResponse.json({ error: cuposFijados.error }, { status: 400 });
   }
 
   // Cada capitán queda asignado a su propio equipo (ocupa un cupo)

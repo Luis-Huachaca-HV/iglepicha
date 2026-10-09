@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { colocarSobrantesEnJornada } from "@/lib/draft-asignar";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { obtenerSesionActual } from "@/lib/session";
 
@@ -32,7 +33,11 @@ export async function POST(req: NextRequest) {
 
   const admin = supabaseAdmin();
 
-  const { data: jornada } = await admin.from("jornadas").select("estado").eq("id_jornada", id_jornada).single();
+  const { data: jornada } = await admin
+    .from("jornadas")
+    .select("estado, draft_estado")
+    .eq("id_jornada", id_jornada)
+    .single();
   if (jornada?.estado === "en_curso") {
     return NextResponse.json(
       { error: "La asistencia está bloqueada — la jornada ya está en curso." },
@@ -73,5 +78,20 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ asistencia: data });
+
+  // Llegada tarde: si el draft ya armó equipos y los cupos base están
+  // llenos, este jugador no se queda en la bolsa. Entra a un equipo y
+  // ese cupo crece. Mientras el draft sigue y todavía hay hueco, queda
+  // en la bolsa para que lo elija el capitán en turno.
+  let advertencia: string | undefined;
+  if (presente && jornada?.draft_estado && jornada.draft_estado !== "no_iniciado") {
+    const colocados = await colocarSobrantesEnJornada(admin, id_jornada, {
+      soloSiNoHayCupo: jornada.draft_estado === "en_curso",
+    });
+    if (colocados.error) {
+      advertencia = "Quedó presente, pero no se pudo meterlo a un equipo. En Draft usa «Asignar sobrantes».";
+    }
+  }
+
+  return NextResponse.json({ asistencia: data, advertencia });
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cerrarOContinuarDraft } from "@/lib/draft-asignar";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { obtenerSesionActual } from "@/lib/session";
 
@@ -9,8 +10,10 @@ export const dynamic = "force-dynamic";
 // POST /api/draft/elegir
 // body: { id_jornada: string, id_equipo: string, id_usuario: string }
 // Asigna un jugador de la bolsa al equipo cuyo turno es, y avanza el
-// turno al siguiente equipo con cupo disponible. Si ya no queda cupo o
-// bolsa, cierra el draft.
+// turno al siguiente equipo con cupo disponible. Si los cupos base ya
+// están llenos pero todavía hay gente en la bolsa, esa gente entra al
+// azar a un equipo existente (el cupo de ese equipo pasa a N+1) y ahí
+// sí se cierra el draft.
 export async function POST(req: NextRequest) {
   const sesion = await obtenerSesionActual();
   if (!sesion) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -75,35 +78,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: asignarError.message }, { status: 500 });
   }
 
-  // Recalcula el estado para decidir el siguiente turno
-  const { data: equipos } = await admin
-    .from("equipos_jornada")
-    .select("*")
-    .eq("id_jornada", id_jornada)
-    .order("orden_turno", { ascending: true });
-  const { count: enBolsa } = await admin
-    .from("asistencia_draft")
-    .select("*", { count: "exact", head: true })
-    .eq("id_jornada", id_jornada)
-    .eq("presente", true)
-    .is("id_equipo", null);
-
-  let siguienteEquipo: string | null = null;
-  if ((enBolsa ?? 0) > 0 && equipos) {
-    const idxActual = equipos.findIndex((e) => e.id_equipo === id_equipo);
-    for (let paso = 1; paso <= equipos.length; paso++) {
-      const candidato = equipos[(idxActual + paso) % equipos.length];
-      const { count: ocupados } = await admin
-        .from("asistencia_draft")
-        .select("*", { count: "exact", head: true })
-        .eq("id_jornada", id_jornada)
-        .eq("id_equipo", candidato.id_equipo);
-      if (!candidato.cupo_max || (ocupados ?? 0) < candidato.cupo_max) {
-        siguienteEquipo = candidato.id_equipo;
-        break;
-      }
-    }
-  }
+  const { siguienteEquipo, error: errorTurno } = await cerrarOContinuarDraft(admin, id_jornada, id_equipo);
+  if (errorTurno) return NextResponse.json({ error: errorTurno }, { status: 500 });
 
   const { data: jornadaActualizada } = await admin
     .from("jornadas")

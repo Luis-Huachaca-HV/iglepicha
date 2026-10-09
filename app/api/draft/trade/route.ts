@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ampliarCupoSiHaceFalta } from "@/lib/draft-asignar";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { obtenerSesionActual } from "@/lib/session";
 
@@ -40,5 +41,6 @@ export async function POST(req: NextRequest) {
     .select("*")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (id_equipo_destino) await ampliarCupoSiHaceFalta(admin, id_equipo_destino);
   return NextResponse.json({ asistencia: data });
 }

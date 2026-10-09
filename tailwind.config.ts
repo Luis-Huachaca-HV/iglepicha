@@ -36,9 +36,14 @@ const config: Config = {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.35" },
         },
+        ratingIn: {
+          "0%": { transform: "scale(1.08)" },
+          "100%": { transform: "scale(1)" },
+        },
       },
       animation: {
         pulseDot: "pulseDot 1.6s ease-in-out infinite",
+        ratingIn: "ratingIn 0.35s ease-out",
       },
     },
   },

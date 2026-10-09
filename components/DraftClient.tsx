@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { excedenteSobreCupo } from "@/lib/draft-capacidad";
 import { supabase } from "@/lib/supabase";
 import { useUsuarios, type UsuarioLista } from "@/lib/useUsuarios";
 import type { AsistenciaDraft, EquipoJornada, Jornada, SesionUsuario } from "@/lib/types";
@@ -35,6 +36,7 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
   const [cupos, setCupos] = useState<Record<string, number>>({});
   const [candidato, setCandidato] = useState<UsuarioLista | null>(null);
   const [tradeAbierto, setTradeAbierto] = useState<string | null>(null);
+  const [confirmarRecalculo, setConfirmarRecalculo] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -187,6 +189,59 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
     cargarTodo(jornada.id_jornada);
   }
 
+  async function sortearEquipos() {
+    if (!jornada) return;
+    const faltan = equipos.some((e) => !cupos[e.id_equipo]);
+    if (faltan) {
+      setError("Define el cupo de cada equipo");
+      return;
+    }
+    setCargando(true);
+    setError(null);
+    const res = await fetch("/api/draft/recalcular", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_jornada: jornada.id_jornada, cupos }),
+    });
+    const data = await res.json();
+    setCargando(false);
+    if (!res.ok) return setError(data.error);
+    setJornada(data.jornada);
+    cargarTodo(jornada.id_jornada);
+  }
+
+  async function recalcularEquipos() {
+    if (!jornada) return;
+    setConfirmarRecalculo(false);
+    setCargando(true);
+    setError(null);
+    const res = await fetch("/api/draft/recalcular", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_jornada: jornada.id_jornada }),
+    });
+    const data = await res.json();
+    setCargando(false);
+    if (!res.ok) return setError(data.error);
+    setJornada(data.jornada);
+    cargarTodo(jornada.id_jornada);
+  }
+
+  async function colocarSobrantes() {
+    if (!jornada) return;
+    setCargando(true);
+    setError(null);
+    const res = await fetch("/api/draft/colocar-sobrantes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_jornada: jornada.id_jornada }),
+    });
+    const data = await res.json();
+    setCargando(false);
+    if (!res.ok) return setError(data.error);
+    cargarTodo(jornada.id_jornada);
+  }
+
   async function confirmarPick() {
     if (!jornada || !candidato || !jornada.draft_turno_equipo_id) return;
     setCargando(true);
@@ -251,6 +306,13 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
 
   // ---------- Setup: no iniciado ----------
   if (jornada.draft_estado === "no_iniciado") {
+    const cuposListos = equipos.every((e) => (cupos[e.id_equipo] ?? 0) > 0);
+    const sobrantesPrevistos = cuposListos
+      ? excedenteSobreCupo(
+          presentes.length,
+          equipos.map((e) => cupos[e.id_equipo])
+        )
+      : 0;
     return (
       <div className="flex flex-col gap-6">
         <div>
@@ -283,13 +345,28 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
         </ul>
         {error && <p className="text-sm text-card-red">{error}</p>}
         {esAdmin ? (
-          <button
-            onClick={iniciarDraft}
-            disabled={cargando}
-            className="w-full rounded-pill bg-turf-500 py-4 font-display text-lg font-bold text-pitch-950 disabled:opacity-50"
-          >
-            Iniciar draft
-          </button>
+          <>
+            {sobrantesPrevistos > 0 && (
+              <p className="rounded border border-floodlight/40 bg-floodlight/10 px-3 py-2 text-sm text-floodlight">
+                Hay {sobrantesPrevistos} jugador{sobrantesPrevistos === 1 ? "" : "es"} más que cupos. No se quedan fuera:
+                entran a un equipo y ese cupo pasa a tener un jugador más.
+              </p>
+            )}
+            <button
+              onClick={iniciarDraft}
+              disabled={cargando}
+              className="w-full rounded-pill bg-turf-500 py-4 font-display text-lg font-bold text-pitch-950 disabled:opacity-50"
+            >
+              Iniciar draft
+            </button>
+            <button
+              onClick={sortearEquipos}
+              disabled={cargando}
+              className="w-full rounded-pill border border-turf-500 py-4 font-display text-lg font-bold text-turf-400 disabled:opacity-50"
+            >
+              Sortear equipos
+            </button>
+          </>
         ) : (
           <p className="text-center text-sm text-mist">Esperando a que el admin defina los cupos e inicie el draft.</p>
         )}
@@ -320,12 +397,21 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
           return (
             <div
               key={e.id_equipo}
-              className={`rounded border bg-pitch-900 p-4 ${enTurno ? "border-floodlight" : "border-pitch-800"}`}
+              className={`rounded border bg-pitch-900 p-4 transition-colors ${enTurno ? "border-floodlight" : "border-pitch-800"}`}
             >
-              <div className="mb-2 flex items-center justify-between">
+              <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="font-display font-bold">Equipo de {usuariosMap[e.id_capitan ?? ""]?.nombre ?? "?"}</span>
-                <span className="text-xs text-mist">
-                  {total}/{e.cupo_max ?? "—"} · prom {avg ? avg.toFixed(1) : "S/C"}
+                <span key={`${total}-${avg ?? "sc"}`} className="animate-ratingIn text-right text-xs text-mist tabular">
+                  <span className={e.cupo_base != null && total > e.cupo_base ? "font-bold text-floodlight" : undefined}>
+                    {total}/{e.cupo_base ?? e.cupo_max ?? "—"}
+                  </span>
+                  {e.cupo_base != null && e.cupo_max != null && e.cupo_max > e.cupo_base && (
+                    <span className="ml-1 rounded-pill bg-floodlight/15 px-1.5 py-0.5 font-bold text-floodlight">
+                      +{e.cupo_max - e.cupo_base}
+                    </span>
+                  )}
+                  {" · prom "}
+                  {avg ? avg.toFixed(1) : "S/C"}
                   {sinClasificar > 0 ? ` (${sinClasificar} S/C)` : ""}
                 </span>
               </div>
@@ -348,15 +434,20 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
         })}
       </div>
 
-      {jornada.draft_estado === "en_curso" && (
+      {(jornada.draft_estado === "en_curso" || bolsa.length > 0) && (
         <div>
           <h2 className="mb-2 font-display text-lg font-bold">Bolsa ({bolsa.length})</h2>
+          {jornada.draft_estado === "en_curso" && (
+            <p className="mb-2 text-xs text-mist">
+              Si los cupos se llenan, quien siga acá entra al azar a un equipo. Ese equipo juega con un jugador más.
+            </p>
+          )}
           {error && <p className="mb-2 text-sm text-card-red">{error}</p>}
           <ul className="flex flex-col divide-y divide-pitch-800">
             {bolsa.map((u) => (
               <li key={u.id_usuario}>
                 <button
-                  disabled={!esMiTurno || cargando}
+                  disabled={jornada.draft_estado !== "en_curso" || !esMiTurno || cargando}
                   onClick={() => setCandidato(u)}
                   className="flex w-full items-center justify-between py-3 text-left disabled:opacity-40"
                 >
@@ -375,11 +466,37 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
             ))}
             {bolsa.length === 0 && <p className="py-4 text-sm text-mist">La bolsa está vacía.</p>}
           </ul>
-          {!esMiTurno && (
+          {jornada.draft_estado === "en_curso" && !esMiTurno && (
             <p className="mt-2 text-xs text-mist">
               Solo {usuariosMap[equipoEnTurno?.id_capitan ?? ""]?.nombre ?? "el capitán en turno"} puede elegir ahora.
             </p>
           )}
+        </div>
+      )}
+
+      {esAdmin && jornada.estado === "pendiente" && (
+        <div className="flex flex-col gap-2">
+          {error && jornada.draft_estado !== "en_curso" && bolsa.length === 0 && (
+            <p className="text-sm text-card-red">{error}</p>
+          )}
+          {bolsa.length > 0 &&
+            (jornada.draft_estado === "finalizado" ||
+              equipos.every((e) => e.cupo_max != null && rosterDe(e.id_equipo).length >= e.cupo_max)) && (
+            <button
+              onClick={colocarSobrantes}
+              disabled={cargando}
+              className="w-full rounded-pill bg-floodlight py-3 font-display font-bold text-pitch-950 disabled:opacity-50"
+            >
+              Asignar sobrantes ({bolsa.length})
+            </button>
+          )}
+          <button
+            onClick={() => setConfirmarRecalculo(true)}
+            disabled={cargando}
+            className="w-full rounded-pill border border-pitch-700 py-3 text-sm disabled:opacity-50"
+          >
+            Recalcular equipos
+          </button>
         </div>
       )}
 
@@ -393,6 +510,29 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
             className="h-5 w-5 accent-turf-500"
           />
         </label>
+      )}
+
+      {confirmarRecalculo && (
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-pitch-950/80 p-6 backdrop-blur-sm" onClick={() => setConfirmarRecalculo(false)}>
+          <div className="w-full max-w-sm rounded-2xl border border-pitch-700 bg-pitch-900 p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <p className="font-display text-xl font-bold">Recalcular equipos</p>
+            <p className="mb-6 mt-2 text-sm text-mist">
+              Se vuelven a repartir todos los presentes. Si sobran jugadores respecto al cupo, un equipo queda con uno más. Nadie se queda fuera.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmarRecalculo(false)} className="flex-1 rounded-pill border border-pitch-700 py-3 text-sm">
+                Cancelar
+              </button>
+              <button
+                onClick={recalcularEquipos}
+                disabled={cargando}
+                className="flex-1 rounded-pill bg-turf-500 py-3 text-sm font-bold text-pitch-950 disabled:opacity-50"
+              >
+                Recalcular
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Confirmación de pick */}
