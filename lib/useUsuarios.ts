@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { supabase } from "@/lib/supabase";
 import type { Posicion, RolSistema } from "@/lib/types";
 
 export interface UsuarioLista {
@@ -9,38 +10,57 @@ export interface UsuarioLista {
   edad: number | null;
   rol_sistema: RolSistema;
   posicion: Posicion | null;
-  tiene_pin: boolean;
+  tiene_pin?: boolean;
+  es_camote?: boolean;
 }
 
-// La lista pasa por la API para que el navegador nunca reciba pin_hash.
-// Se refresca al montar, cada cinco segundos y al recuperar foco; las
-// respuestas llevan no-store y la ruta es dinámica.
 export function useUsuarios() {
   const [usuarios, setUsuarios] = useState<UsuarioLista[]>([]);
 
   const recargarUsuarios = useCallback(async () => {
     try {
       const res = await fetch("/api/usuarios", { cache: "no-store" });
-      if (!res.ok) return;
-      const data = await res.json();
-      setUsuarios((data.usuarios ?? []) as UsuarioLista[]);
+      if (res.ok) {
+        const d = await res.json();
+        if (Array.isArray(d.usuarios)) {
+          setUsuarios(d.usuarios as UsuarioLista[]);
+          return;
+        }
+      }
     } catch {
-      // Conserva la lista actual ante un corte momentáneo de red.
+      // respaldo directo a Supabase si falla el fetch
+    }
+
+    const conCamote = await supabase
+      .from("usuarios")
+      .select("id_usuario, nombre, edad, rol_sistema, posicion, es_camote")
+      .order("nombre", { ascending: true });
+
+    if (!conCamote.error && conCamote.data) {
+      setUsuarios(conCamote.data as UsuarioLista[]);
+      return;
+    }
+
+    const sinCamote = await supabase
+      .from("usuarios")
+      .select("id_usuario, nombre, edad, rol_sistema, posicion")
+      .order("nombre", { ascending: true });
+
+    if (sinCamote.data) {
+      setUsuarios(sinCamote.data as UsuarioLista[]);
     }
   }, []);
 
   useEffect(() => {
     recargarUsuarios();
-    const id = window.setInterval(recargarUsuarios, 5000);
-    const alVolver = () => {
-      if (document.visibilityState === "visible") recargarUsuarios();
-    };
-    document.addEventListener("visibilitychange", alVolver);
-    window.addEventListener("focus", alVolver);
+    const canal = supabase
+      .channel(`usuarios-realtime-${Math.random().toString(36).slice(2)}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "usuarios" }, () => {
+        recargarUsuarios();
+      })
+      .subscribe();
     return () => {
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", alVolver);
-      window.removeEventListener("focus", alVolver);
+      supabase.removeChannel(canal);
     };
   }, [recargarUsuarios]);
 

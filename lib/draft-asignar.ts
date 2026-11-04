@@ -5,6 +5,7 @@ import {
   type JugadorReparto,
   type PosicionReparto,
 } from "@/lib/draft-capacidad";
+import { camotesPresentes, colocarCamotes } from "@/lib/draft-reglas";
 
 type Admin = SupabaseClient;
 
@@ -58,17 +59,19 @@ async function leerAsistencias(admin: Admin, idJornada: string): Promise<{ filas
 }
 
 /**
- * Si un equipo quedó con más jugadores que su cupo guardado, sube cupo_max.
- * No rechaza la fila: en la base no hay un check de capacidad.
+ * Si un equipo quedó con más jugadores titulares (no Camotes) que su cupo guardado, sube cupo_max.
  */
 export async function ampliarCupoSiHaceFalta(admin: Admin, idEquipo: string) {
-  const [{ count }, { data: equipo }] = await Promise.all([
-    admin.from("asistencia_draft").select("*", { count: "exact", head: true }).eq("id_equipo", idEquipo),
-    admin.from("equipos_jornada").select("*").eq("id_equipo", idEquipo).maybeSingle(),
-  ]);
+  const { data: equipo } = await admin.from("equipos_jornada").select("*").eq("id_equipo", idEquipo).maybeSingle();
   if (!equipo) return;
-  const fila = equipo as FilaEquipo;
-  const ocupados = count ?? 0;
+  const fila = equipo as FilaEquipo & { id_jornada?: string };
+
+  const [{ data: asis }, camotes] = await Promise.all([
+    admin.from("asistencia_draft").select("id_usuario").eq("id_equipo", idEquipo).eq("presente", true),
+    fila.id_jornada ? camotesPresentes(admin, fila.id_jornada) : Promise.resolve(new Set<string>()),
+  ]);
+
+  const ocupados = (asis ?? []).filter((a) => !camotes.has(a.id_usuario as string)).length;
   const cupoActual = fila.cupo_max ?? 0;
   if (fila.cupo_max == null || ocupados <= cupoActual) return;
 
@@ -80,10 +83,7 @@ export async function ampliarCupoSiHaceFalta(admin: Admin, idEquipo: string) {
 }
 
 /**
- * Asigna a los presentes que siguen sin equipo.
- * `soloSiNoHayCupo`: durante el draft en curso no les quita el turno a los
- * capitanes si todavía hay un hueco. Cuando todos los cupos base están
- * llenos, los mete igual.
+ * Asigna a los presentes titulares (no Camotes) que siguen sin equipo.
  */
 export async function colocarSobrantesEnJornada(
   admin: Admin,
@@ -94,14 +94,17 @@ export async function colocarSobrantesEnJornada(
   if (errorEquipos) return { asignados: [], hayCupo: false, error: errorEquipos };
   if (equipos.length === 0) return { asignados: [], hayCupo: false };
 
-  const { filas, error: errorAsistencias } = await leerAsistencias(admin, idJornada);
+  const [{ filas, error: errorAsistencias }, camotes] = await Promise.all([
+    leerAsistencias(admin, idJornada),
+    camotesPresentes(admin, idJornada),
+  ]);
   if (errorAsistencias) return { asignados: [], hayCupo: false, error: errorAsistencias };
 
   const ocupados = new Map<string, number>();
   for (const equipo of equipos) ocupados.set(equipo.id_equipo, 0);
   const sobrantes: string[] = [];
   for (const fila of filas) {
-    if (!fila.presente) continue;
+    if (!fila.presente || camotes.has(fila.id_usuario)) continue;
     if (fila.id_equipo && ocupados.has(fila.id_equipo)) {
       ocupados.set(fila.id_equipo, (ocupados.get(fila.id_equipo) ?? 0) + 1);
     } else if (!fila.id_equipo) {
@@ -166,11 +169,14 @@ async function siguienteEquipoConCupo(
   equipos: FilaEquipo[],
   idEquipoActual: string
 ): Promise<string | null> {
-  const { filas } = await leerAsistencias(admin, idJornada);
+  const [{ filas }, camotes] = await Promise.all([
+    leerAsistencias(admin, idJornada),
+    camotesPresentes(admin, idJornada),
+  ]);
   const ocupados = new Map<string, number>();
   let enBolsa = 0;
   for (const fila of filas) {
-    if (!fila.presente) continue;
+    if (!fila.presente || camotes.has(fila.id_usuario)) continue;
     if (fila.id_equipo) ocupados.set(fila.id_equipo, (ocupados.get(fila.id_equipo) ?? 0) + 1);
     else enBolsa += 1;
   }
@@ -188,9 +194,9 @@ async function siguienteEquipoConCupo(
 }
 
 /**
- * Después de un pick: si queda gente en la bolsa y algún equipo tiene
+ * Después de un pick: si queda gente titular en la bolsa y algún equipo tiene
  * cupo, sigue el turno. Si los cupos base ya se llenaron, asigna a los
- * sobrantes y cierra el draft — no los deja en la bolsa.
+ * sobrantes y cierra el draft.
  */
 export async function cerrarOContinuarDraft(
   admin: Admin,
@@ -204,8 +210,11 @@ export async function cerrarOContinuarDraft(
   const siguiente = await siguienteEquipoConCupo(admin, idJornada, equipos, idEquipoActual);
   if (siguiente) return { siguienteEquipo: siguiente };
 
-  const { filas } = await leerAsistencias(admin, idJornada);
-  const haySobrantes = filas.some((fila) => fila.presente && !fila.id_equipo);
+  const [{ filas }, camotes] = await Promise.all([
+    leerAsistencias(admin, idJornada),
+    camotesPresentes(admin, idJornada),
+  ]);
+  const haySobrantes = filas.some((fila) => fila.presente && !fila.id_equipo && !camotes.has(fila.id_usuario));
   if (!haySobrantes) return { siguienteEquipo: null };
 
   const colocados = await colocarSobrantesEnJornada(admin, idJornada, { soloSiNoHayCupo: true });
@@ -265,8 +274,8 @@ export async function fijarCupos(
 }
 
 /**
- * Sorteo completo: equilibra por valoración y mete a todos los presentes,
- * aunque superen el cupo base. Cierra el draft.
+ * Sorteo completo: equilibra por valoración a los titulares, excluye Camotes
+ * del cupo y al finalizar reparte los Camotes según la regla especial.
  */
 export async function recalcularEquiposJornada(
   admin: Admin,
@@ -304,14 +313,27 @@ export async function recalcularEquiposJornada(
     .eq("presente", false);
   if (errorAusentes) return { error: errorAusentes.message };
 
-  const { filas, error: errorAsistencias } = await leerAsistencias(admin, idJornada);
+  const [{ filas, error: errorAsistencias }, camotes] = await Promise.all([
+    leerAsistencias(admin, idJornada),
+    camotesPresentes(admin, idJornada),
+  ]);
   if (errorAsistencias) return { error: errorAsistencias };
 
-  const presentes = new Set(filas.filter((fila) => fila.presente).map((fila) => fila.id_usuario));
-  for (const equipo of equipos) {
-    if (equipo.id_capitan) presentes.add(equipo.id_capitan);
+  for (const idCamote of camotes) {
+    await admin
+      .from("asistencia_draft")
+      .update({ id_equipo: null })
+      .eq("id_jornada", idJornada)
+      .eq("id_usuario", idCamote);
   }
-  if (presentes.size === 0) return { error: "No hay jugadores presentes para sortear" };
+
+  const presentes = new Set(
+    filas.filter((fila) => fila.presente && !camotes.has(fila.id_usuario)).map((fila) => fila.id_usuario)
+  );
+  for (const equipo of equipos) {
+    if (equipo.id_capitan && !camotes.has(equipo.id_capitan)) presentes.add(equipo.id_capitan);
+  }
+  if (presentes.size === 0) return { error: "No hay jugadores titulares presentes para sortear" };
 
   const { data: usuarios, error: errorUsuarios } = await admin
     .from("usuarios")
@@ -361,6 +383,8 @@ export async function recalcularEquiposJornada(
     if (errorCupo) return { error: errorCupo.message };
     await recordarCupoBase(admin, equipo.id, equipo.cupoBase);
   }
+
+  await colocarCamotes(admin, idJornada);
 
   const { error: errorCierre } = await admin
     .from("jornadas")

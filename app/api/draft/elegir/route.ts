@@ -1,19 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cerrarOContinuarDraft } from "@/lib/draft-asignar";
+import { colocarCamotes, leerReglasDraft, motivoBloqueo } from "@/lib/draft-reglas";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { obtenerSesionActual } from "@/lib/session";
 
-// Nunca cachear: esta ruta siempre debe leer/escribir el estado más
-// reciente de Supabase, no una versión congelada del último deploy.
 export const dynamic = "force-dynamic";
 
-// POST /api/draft/elegir
-// body: { id_jornada: string, id_equipo: string, id_usuario: string }
-// Asigna un jugador de la bolsa al equipo cuyo turno es, y avanza el
-// turno al siguiente equipo con cupo disponible. Si los cupos base ya
-// están llenos pero todavía hay gente en la bolsa, esa gente entra al
-// azar a un equipo existente (el cupo de ese equipo pasa a N+1) y ahí
-// sí se cierra el draft.
 export async function POST(req: NextRequest) {
   const sesion = await obtenerSesionActual();
   if (!sesion) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -29,7 +21,7 @@ export async function POST(req: NextRequest) {
 
   const admin = supabaseAdmin();
 
-  const { data: jornada } = await admin.from("jornadas").select("*").eq("id_jornada", id_jornada).single();
+  const { data: jornada } = await admin.from("jornadas").select("*").eq("id_jornada", id_jornada).maybeSingle();
   if (!jornada || jornada.draft_estado !== "en_curso") {
     return NextResponse.json({ error: "El draft no está en curso" }, { status: 400 });
   }
@@ -41,7 +33,7 @@ export async function POST(req: NextRequest) {
     .from("equipos_jornada")
     .select("*")
     .eq("id_equipo", id_equipo)
-    .single();
+    .maybeSingle();
   if (!equipoTurno) {
     return NextResponse.json({ error: "Equipo no encontrado" }, { status: 404 });
   }
@@ -57,12 +49,24 @@ export async function POST(req: NextRequest) {
     .select("*")
     .eq("id_jornada", id_jornada)
     .eq("id_usuario", id_usuario)
-    .single();
+    .maybeSingle();
   if (!asistenciaJugador || !asistenciaJugador.presente || asistenciaJugador.id_equipo) {
     return NextResponse.json({ error: "Ese jugador no está disponible" }, { status: 400 });
   }
 
-  // Asigna el jugador
+  const reglas = await leerReglasDraft(admin, id_jornada);
+  if (reglas.camotesPresentes.has(id_usuario)) {
+    return NextResponse.json(
+      { error: "Los jugadores marcados como Camote se reparten automáticamente al finalizar el draft." },
+      { status: 409 }
+    );
+  }
+
+  const bloqueo = motivoBloqueo(reglas, id_equipo, id_usuario);
+  if (bloqueo) {
+    return NextResponse.json({ error: bloqueo }, { status: 409 });
+  }
+
   const { error: asignarError } = await admin
     .from("asistencia_draft")
     .update({ id_equipo })
@@ -81,6 +85,12 @@ export async function POST(req: NextRequest) {
   const { siguienteEquipo, error: errorTurno } = await cerrarOContinuarDraft(admin, id_jornada, id_equipo);
   if (errorTurno) return NextResponse.json({ error: errorTurno }, { status: 500 });
 
+  let camotesSinEquipo: { id_usuario: string; nombre: string }[] = [];
+  if (!siguienteEquipo) {
+    const resCamotes = await colocarCamotes(admin, id_jornada);
+    camotesSinEquipo = resCamotes.sinEquipo;
+  }
+
   const { data: jornadaActualizada } = await admin
     .from("jornadas")
     .update({
@@ -89,7 +99,7 @@ export async function POST(req: NextRequest) {
     })
     .eq("id_jornada", id_jornada)
     .select("*")
-    .single();
+    .maybeSingle();
 
-  return NextResponse.json({ jornada: jornadaActualizada });
+  return NextResponse.json({ jornada: jornadaActualizada, camotes_sin_equipo: camotesSinEquipo });
 }

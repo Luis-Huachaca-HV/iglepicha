@@ -9,6 +9,7 @@ export interface Usuario {
   rol_sistema: RolSistema;
   posicion: Posicion | null;
   pin_hash: string | null;
+  es_camote?: boolean;
 }
 
 export interface SesionUsuario {
@@ -31,6 +32,8 @@ export interface Jornada {
   permitir_cambios_post_draft: boolean;
   duracion_mini_partido_seg: number;
   creado_por: string | null;
+  max_tops_por_equipo?: number | null;
+  umbral_top?: number;
 }
 
 export interface EquipoJornada {

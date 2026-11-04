@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { RadarChart, ETIQUETAS } from "@/components/RadarChart";
 import { Avatar, colorDeEquipo } from "@/components/Avatar";
+import { CamoteToggle } from "@/components/CamoteToggle";
 import { Toast } from "@/components/Toast";
 import { useUsuarios } from "@/lib/useUsuarios";
 import { useToast } from "@/lib/useToast";
-import type { AsistenciaDraft, EquipoJornada, Jornada, Posicion, RolSistema, SesionUsuario } from "@/lib/types";
+import type { AsistenciaDraft, EquipoJornada, Jornada, Posicion, SesionUsuario } from "@/lib/types";
 
 const POSICIONES: Posicion[] = ["POR", "DEF", "MC", "DEL"];
 
@@ -39,9 +40,6 @@ function cumpleFiltro(edad: number | null, filtro: FiltroEdad) {
 export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
   const [jornada, setJornada] = useState<Jornada | null>(null);
 
-  // Canal SIEMPRE activo (no depende de tener ya una jornada cargada):
-  // avisa al instante si nace una jornada nueva en cualquier dispositivo
-  // (Reiniciar todo / Comenzar jornada nueva), sin esperar el sondeo de 5s.
   useEffect(() => {
     const canalNuevaJornada = supabase
       .channel(`jornada-nueva-${Math.random().toString(36).slice(2)}`)
@@ -64,6 +62,7 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
   const [modalNuevoJugador, setModalNuevoJugador] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevaEdad, setNuevaEdad] = useState("");
+  const [nuevoCamote, setNuevoCamote] = useState(false);
   const [pasoNuevo, setPasoNuevo] = useState<1 | 2 | 3>(1);
   const [chipsNuevo, setChipsNuevo] = useState<string[]>([]);
   const [valoracionNueva, setValoracionNueva] = useState(6);
@@ -96,7 +95,7 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
       const r = await fetch("/api/jornada/active", { cache: "no-store" });
       if (!r.ok) return null;
       const d = await r.json();
-      if (!d?.jornada) return null; // sondeo fallido: nunca borrar lo que ya está en pantalla
+      if (!d?.jornada) return null;
       setJornada(d.jornada);
       cargarAsistenciasYEquipos(d.jornada.id_jornada);
       return d.jornada as Jornada;
@@ -127,8 +126,6 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
       });
   }, [cargarJornada]);
 
-  // Red de seguridad si Realtime se cae (redes de celular, pantalla
-  // bloqueada): reintenta solo cada pocos segundos o al volver a la app.
   useEffect(() => {
     const id = setInterval(cargarJornada, 5000);
     function alVolver() {
@@ -136,9 +133,6 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
     }
     document.addEventListener("visibilitychange", alVolver);
     window.addEventListener("focus", alVolver);
-    // Safari/iOS a veces restaura la página "congelada" desde el gesto de
-    // volver atrás (bfcache) en vez de recargarla — sin esto, se queda con
-    // datos de una jornada que ya no existe.
     function alRestaurarBfcache(e: PageTransitionEvent) {
       if (e.persisted) alVolver();
     }
@@ -174,7 +168,6 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
   async function marcar(idUsuario: string, presente: boolean) {
     if (!jornada) return;
     const anterior = asistencias[idUsuario];
-    // Optimista: refleja el cambio de inmediato, la suscripción realtime confirma
     setAsistencias((prev) => ({
       ...prev,
       [idUsuario]: { ...(prev[idUsuario] as AsistenciaDraft), id_usuario: idUsuario, id_jornada: jornada.id_jornada, presente } as AsistenciaDraft,
@@ -190,9 +183,6 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
     let res = await intentar(jornada.id_jornada);
     let data = await res.json().catch(() => ({}));
 
-    // Hasta 2 reintentos silenciosos si la jornada local estaba vieja —
-    // en cada uno se vuelve a pedir cuál es la jornada real antes de
-    // reintentar, así nunca se queda pegado a un ID que ya no sirve.
     for (let intento = 0; !res.ok && data?.jornadaInvalida && intento < 2; intento++) {
       if (intento === 1) await new Promise((r) => setTimeout(r, 400));
       const fresca = await cargarJornada();
@@ -295,10 +285,11 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
     }
     setGuardandoNuevo(true);
     setErrorNuevo(null);
+    const edadNum = nuevaEdad ? Number(nuevaEdad) : undefined;
     const res = await fetch("/api/usuarios/crear", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nombre: nuevoNombre, edad: nuevaEdad ? Number(nuevaEdad) : undefined }),
+      body: JSON.stringify({ nombre: nuevoNombre, edad: edadNum }),
     });
     const data = await res.json();
     setGuardandoNuevo(false);
@@ -315,6 +306,13 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
         body: JSON.stringify({ id_usuario: idNuevo, posicion: chip.guarda }),
       });
     }
+    if (idNuevo && nuevoCamote && typeof edadNum === "number" && edadNum < 12) {
+      await fetch("/api/usuarios/camote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_usuario: idNuevo, es_camote: true }),
+      });
+    }
     if (idNuevo && idNuevo !== sesion.id_usuario) {
       const stats = Object.fromEntries(ETIQUETAS.map((e) => [e.clave, valoracionNueva]));
       await fetch("/api/valoraciones", {
@@ -327,6 +325,7 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
     setModalNuevoJugador(false);
     setNuevoNombre("");
     setNuevaEdad("");
+    setNuevoCamote(false);
     setPasoNuevo(1);
     setChipsNuevo([]);
     setValoracionNueva(6);
@@ -435,6 +434,7 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
           const presente = !!asistencias[u.id_usuario]?.presente;
           const enEquipo = !!asistencias[u.id_usuario]?.id_equipo;
           const bloqueadoQuitar = presente && enEquipo;
+          const esCamote = Boolean(u.es_camote && typeof u.edad === "number" && u.edad < 12);
           return (
             <li key={u.id_usuario} className="flex items-center justify-between gap-2 py-2">
               <button className="flex min-w-0 flex-1 items-center gap-3 py-1.5 text-left" onClick={() => { setSeleccionado(u.id_usuario); setEditandoValoracion(false); }}>
@@ -448,7 +448,14 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
                   anillo={presente ? "asistencia" : undefined}
                 />
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium">{u.nombre}</span>
+                  <span className="block truncate text-sm font-medium">
+                    {u.nombre}
+                    {esCamote && (
+                      <span className="ml-2 rounded-pill bg-floodlight/15 px-2 py-0.5 text-xs font-bold text-floodlight">
+                        Camote
+                      </span>
+                    )}
+                  </span>
                   <span className="block truncate text-xs text-mist">
                     {u.edad ? `${u.edad} años` : "Edad no registrada"}
                     {u.posicion ? ` · ${u.posicion}` : ""} · {nombreEquipo(asistencias[u.id_usuario]?.id_equipo)}
@@ -499,6 +506,19 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
               {jugadorSeleccionado.edad ? `${jugadorSeleccionado.edad} años` : "Edad no registrada"}
               {jugadorSeleccionado.posicion ? ` · ${jugadorSeleccionado.posicion}` : ""}
             </p>
+
+            {esAdmin && (
+              <CamoteToggle
+                idUsuario={jugadorSeleccionado.id_usuario}
+                edad={jugadorSeleccionado.edad}
+                esCamote={Boolean(jugadorSeleccionado.es_camote)}
+                onChanged={() => {
+                  recargarUsuarios();
+                  mostrarToast("✓ Estado Camote actualizado");
+                }}
+                onError={(msg) => mostrarToast(msg)}
+              />
+            )}
 
             {esAdmin && (
               <div className="mb-4 flex gap-2">
@@ -632,11 +652,28 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
                     type="number"
                     min={1}
                     value={nuevaEdad}
-                    onChange={(e) => setNuevaEdad(e.target.value)}
+                    onChange={(e) => {
+                      setNuevaEdad(e.target.value);
+                      if (!e.target.value || Number(e.target.value) >= 12) setNuevoCamote(false);
+                    }}
                     placeholder="Ej. 27"
                     className="rounded border border-pitch-700 bg-pitch-950 px-3 py-2.5 text-base text-chalk"
                   />
                 </label>
+                {nuevaEdad && Number(nuevaEdad) > 0 && Number(nuevaEdad) < 12 && (
+                  <label className="flex cursor-pointer items-center justify-between rounded border border-floodlight/40 bg-floodlight/10 px-3 py-2.5">
+                    <div>
+                      <span className="block text-sm font-bold text-floodlight">Camote (menor de 12)</span>
+                      <span className="block text-xs text-mist">No ocupa cupo en el draft ni paga cancha.</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={nuevoCamote}
+                      onChange={(e) => setNuevoCamote(e.target.checked)}
+                      className="h-5 w-5 accent-floodlight"
+                    />
+                  </label>
+                )}
               </div>
             )}
             {pasoNuevo === 2 && (
@@ -729,26 +766,28 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
             <h2 className="font-display text-xl font-bold">Elegir capitanes</h2>
             <p className="mb-4 text-sm text-mist">Toca a los jugadores presentes que serán capitanes de equipo.</p>
             <ul className="mb-4 flex max-h-64 flex-col gap-1 overflow-y-auto">
-              {presentes.map((u) => {
-                const marcado = capitanesElegidos.includes(u.id_usuario);
-                return (
-                  <li key={u.id_usuario}>
-                    <button
-                      onClick={() =>
-                        setCapitanesElegidos((prev) =>
-                          marcado ? prev.filter((id) => id !== u.id_usuario) : [...prev, u.id_usuario]
-                        )
-                      }
-                      className={`flex w-full items-center justify-between rounded px-3 py-3 text-sm ${
-                        marcado ? "bg-turf-700" : "bg-pitch-800"
-                      }`}
-                    >
-                      {u.nombre}
-                      {marcado && <span>✓</span>}
-                    </button>
-                  </li>
-                );
-              })}
+              {presentes
+                .filter((u) => !(u.es_camote && typeof u.edad === "number" && u.edad < 12))
+                .map((u) => {
+                  const marcado = capitanesElegidos.includes(u.id_usuario);
+                  return (
+                    <li key={u.id_usuario}>
+                      <button
+                        onClick={() =>
+                          setCapitanesElegidos((prev) =>
+                            marcado ? prev.filter((id) => id !== u.id_usuario) : [...prev, u.id_usuario]
+                          )
+                        }
+                        className={`flex w-full items-center justify-between rounded px-3 py-3 text-sm ${
+                          marcado ? "bg-turf-700" : "bg-pitch-800"
+                        }`}
+                      >
+                        {u.nombre}
+                        {marcado && <span>✓</span>}
+                      </button>
+                    </li>
+                  );
+                })}
               {presentes.length === 0 && <p className="text-sm text-mist">Nadie marcado presente todavía.</p>}
             </ul>
             <p className="mb-3 text-xs text-mist">{capitanesElegidos.length} equipo(s) se crearán</p>

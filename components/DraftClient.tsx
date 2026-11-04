@@ -17,12 +17,13 @@ function promedioGeneral(stats: Record<string, number> | undefined): number | nu
   return valores.reduce((a, b) => a + b, 0) / valores.length;
 }
 
+function esUsuarioCamote(u: UsuarioLista | undefined): boolean {
+  return Boolean(u?.es_camote && typeof u.edad === "number" && u.edad < 12);
+}
+
 export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
   const [jornada, setJornada] = useState<Jornada | null>(null);
 
-  // Canal SIEMPRE activo (no depende de tener ya una jornada cargada):
-  // avisa al instante si nace una jornada nueva en cualquier dispositivo
-  // (Reiniciar todo / Comenzar jornada nueva), sin esperar el sondeo de 5s.
   useEffect(() => {
     const canalNuevaJornada = supabase
       .channel(`jornada-nueva-${Math.random().toString(36).slice(2)}`)
@@ -43,6 +44,7 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
   const [confirmarRecalculo, setConfirmarRecalculo] = useState(false);
   const [vistaCancha, setVistaCancha] = useState(false);
   const [equipoCancha, setEquipoCancha] = useState<string | null>(null);
+  const [avisoCamotes, setAvisoCamotes] = useState<string | null>(null);
   const sensores = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +64,7 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
     fetch("/api/jornada/active", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (!d?.jornada) return; // sondeo fallido: nunca borrar lo que ya está en pantalla
+        if (!d?.jornada) return;
         setJornada(d.jornada);
         cargarTodo(d.jornada.id_jornada);
       })
@@ -92,10 +94,6 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
       });
   }, [cargarJornada]);
 
-  // Red de seguridad: Realtime a veces se cae solo en redes de celular
-  // (pantalla bloqueada, señal débil). Sin esto, si el WebSocket se cae,
-  // la pantalla se queda pegada hasta que alguien la recargue a mano.
-  // Con esto, se autocorrige sola cada pocos segundos o al volver a la app.
   useEffect(() => {
     const id = setInterval(cargarJornada, 5000);
     function alVolver() {
@@ -103,9 +101,6 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
     }
     document.addEventListener("visibilitychange", alVolver);
     window.addEventListener("focus", alVolver);
-    // Safari/iOS a veces restaura la página "congelada" desde el gesto de
-    // volver atrás (bfcache) en vez de recargarla — sin esto, se queda con
-    // datos de una jornada que ya no existe.
     function alRestaurarBfcache(e: PageTransitionEvent) {
       if (e.persisted) alVolver();
     }
@@ -153,22 +148,44 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
     usuarios,
     asistenciaPorUsuario,
   ]);
+  const titularesPresentes = useMemo(() => presentes.filter((u) => !esUsuarioCamote(u)), [presentes]);
+  const camotesEnJornada = useMemo(() => presentes.filter((u) => esUsuarioCamote(u)), [presentes]);
   const ausentes = useMemo(() => usuarios.filter((u) => !asistenciaPorUsuario[u.id_usuario]?.presente), [
     usuarios,
     asistenciaPorUsuario,
   ]);
 
   const bolsa = useMemo(
-    () => presentes.filter((u) => !asistenciaPorUsuario[u.id_usuario]?.id_equipo),
+    () => presentes.filter((u) => !asistenciaPorUsuario[u.id_usuario]?.id_equipo && !esUsuarioCamote(u)),
     [presentes, asistenciaPorUsuario]
   );
+
+  const umbralTop = typeof jornada?.umbral_top === "number" ? Number(jornada.umbral_top) : 7.5;
+  const topsPresentesSet = useMemo(() => {
+    const s = new Set<string>();
+    for (const u of titularesPresentes) {
+      if ((ratings[u.id_usuario] ?? 0) >= umbralTop) s.add(u.id_usuario);
+    }
+    return s;
+  }, [titularesPresentes, ratings, umbralTop]);
+
+  const maxTopsPorEquipo = useMemo(() => {
+    if (typeof jornada?.max_tops_por_equipo === "number" && jornada.max_tops_por_equipo >= 1) {
+      return jornada.max_tops_por_equipo;
+    }
+    return Math.max(1, Math.ceil(topsPresentesSet.size / Math.max(1, equipos.length)));
+  }, [jornada?.max_tops_por_equipo, topsPresentesSet.size, equipos.length]);
 
   function rosterDe(idEquipo: string) {
     return asistencias.filter((a) => a.id_equipo === idEquipo).map((a) => usuariosMap[a.id_usuario]).filter(Boolean);
   }
 
+  function topsDeEquipo(idEquipo: string): number {
+    return rosterDe(idEquipo).filter((u) => !esUsuarioCamote(u) && topsPresentesSet.has(u.id_usuario)).length;
+  }
+
   function promedioEquipo(idEquipo: string) {
-    const roster = rosterDe(idEquipo);
+    const roster = rosterDe(idEquipo).filter((u) => !esUsuarioCamote(u));
     const clasificados = roster.map((u) => ratings[u.id_usuario]).filter((r): r is number => r !== undefined && r > 0);
     const sinClasificar = roster.length - clasificados.length;
     const avg = clasificados.length ? clasificados.reduce((a, b) => a + b, 0) / clasificados.length : null;
@@ -270,6 +287,11 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
       if (data.jornadaInvalida) cargarJornada();
       return;
     }
+    if (Array.isArray(data.camotes_sin_equipo) && data.camotes_sin_equipo.length > 0) {
+      setAvisoCamotes(
+        `Más Camotes que equipos: quedaron sin equipo ${data.camotes_sin_equipo.map((c: { nombre: string }) => c.nombre).join(", ")}.`
+      );
+    }
     setJornada(data.jornada);
   }
 
@@ -297,11 +319,16 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
   async function mover(idUsuario: string, idEquipoDestino: string | null) {
     if (!jornada) return;
     setTradeAbierto(null);
-    await fetch("/api/draft/trade", {
+    setError(null);
+    const res = await fetch("/api/draft/trade", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id_jornada: jornada.id_jornada, id_usuario: idUsuario, id_equipo_destino: idEquipoDestino }),
     });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(data.error ?? "No se pudo mover al jugador");
+    }
     cargarTodo(jornada.id_jornada);
   }
 
@@ -310,8 +337,8 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
   const equipoEnTurno = equipos.find((e) => e.id_equipo === jornada.draft_turno_equipo_id) || null;
   const esSuperAdmin = sesion.rol_sistema === "super_admin";
   const esMiTurno = esSuperAdmin || equipoEnTurno?.id_capitan === sesion.id_usuario;
+  const equipoTurnoLlenoDeTops = equipoEnTurno ? topsDeEquipo(equipoEnTurno.id_equipo) >= maxTopsPorEquipo : false;
 
-  // ---------- Sin equipos suficientes ----------
   if (equipos.length < 2) {
     return (
       <div className="rounded border border-dashed border-pitch-700 p-6 text-center">
@@ -321,12 +348,11 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
     );
   }
 
-  // ---------- Setup: no iniciado ----------
   if (jornada.draft_estado === "no_iniciado") {
     const cuposListos = equipos.every((e) => (cupos[e.id_equipo] ?? 0) > 0);
     const sobrantesPrevistos = cuposListos
       ? excedenteSobreCupo(
-          presentes.length,
+          titularesPresentes.length,
           equipos.map((e) => cupos[e.id_equipo])
         )
       : 0;
@@ -334,7 +360,10 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
       <div className="flex flex-col gap-6">
         <div>
           <h1 className="font-display text-2xl font-bold">Draft</h1>
-          <p className="text-sm text-mist">{presentes.length} jugadores presentes en total.</p>
+          <p className="text-sm text-mist">
+            {titularesPresentes.length} titulares presentes
+            {camotesEnJornada.length > 0 ? ` + ${camotesEnJornada.length} Camote(s)` : ""}.
+          </p>
           {ausentes.length > 0 && (
             <p className="mt-1 text-xs text-mist">
               Faltan {ausentes.length}: {ausentes.map((u) => u.nombre).join(", ")}
@@ -376,12 +405,14 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
                   key={e.id_equipo}
                   nombreEquipo={`Equipo de ${usuariosMap[e.id_capitan ?? ""]?.nombre ?? "?"}`}
                   color={colorDeEquipo(indice)}
-                  jugadores={rosterDe(e.id_equipo).map((u) => ({
-                    id: u.id_usuario,
-                    nombre: u.nombre,
-                    posicion: u.posicion,
-                    valoracion: ratings[u.id_usuario] ? ratings[u.id_usuario] : null,
-                  }))}
+                  jugadores={rosterDe(e.id_equipo)
+                    .filter((u) => !esUsuarioCamote(u))
+                    .map((u) => ({
+                      id: u.id_usuario,
+                      nombre: u.nombre,
+                      posicion: u.posicion,
+                      valoracion: ratings[u.id_usuario] ? ratings[u.id_usuario] : null,
+                    }))}
                 />
               ) : null
             )}
@@ -438,7 +469,6 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
     );
   }
 
-  // ---------- En curso / finalizado ----------
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -446,7 +476,7 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
         {jornada.draft_estado === "en_curso" ? (
           <p className="mt-1 flex items-center gap-1.5 text-sm text-floodlight">
             <span className="h-1.5 w-1.5 animate-pulseDot rounded-full bg-floodlight" />
-            Turno de {usuariosMap[equipoEnTurno?.id_capitan ?? ""]?.nombre ?? "…"}
+            Turno de {usuariosMap[equipoEnTurno?.id_capitan ?? ""]?.nombre ?? "…"} · Tope Top (≥{umbralTop.toFixed(1)}★): máx {maxTopsPorEquipo}/equipo
           </p>
         ) : (
           <p className="mt-1 text-sm text-turf-400">Draft finalizado</p>
@@ -461,6 +491,12 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
           {vistaCancha ? "Ver listas" : "Ver cancha"}
         </button>
       </div>
+
+      {avisoCamotes && (
+        <div className="rounded border border-floodlight bg-floodlight/10 px-4 py-3 text-sm text-floodlight">
+          ⚠️ {avisoCamotes}
+        </div>
+      )}
 
       {vistaCancha && (
         <div className="flex flex-col gap-3">
@@ -488,12 +524,14 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
                 key={e.id_equipo}
                 nombreEquipo={`Equipo de ${usuariosMap[e.id_capitan ?? ""]?.nombre ?? "?"}`}
                 color={colorDeEquipo(indice)}
-                jugadores={rosterDe(e.id_equipo).map((u) => ({
-                  id: u.id_usuario,
-                  nombre: u.nombre,
-                  posicion: u.posicion,
-                  valoracion: ratings[u.id_usuario] ? ratings[u.id_usuario] : null,
-                }))}
+                jugadores={rosterDe(e.id_equipo)
+                  .filter((u) => !esUsuarioCamote(u))
+                  .map((u) => ({
+                    id: u.id_usuario,
+                    nombre: u.nombre,
+                    posicion: u.posicion,
+                    valoracion: ratings[u.id_usuario] ? ratings[u.id_usuario] : null,
+                  }))}
               />
             ) : null
           )}
@@ -505,6 +543,7 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
         {equipos.map((e) => {
           const roster = rosterDe(e.id_equipo);
           const { avg, sinClasificar, total } = promedioEquipo(e.id_equipo);
+          const topsCount = topsDeEquipo(e.id_equipo);
           const enTurno = e.id_equipo === jornada.draft_turno_equipo_id;
           const puedeArrastrar = esAdmin && jornada.estado === "pendiente" && jornada.draft_estado === "finalizado";
           return (
@@ -524,6 +563,8 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
                       +{e.cupo_max - e.cupo_base}
                     </span>
                   )}
+                  {" · tops "}
+                  {topsCount}/{maxTopsPorEquipo}
                   {" · prom "}
                   {avg ? avg.toFixed(1) : "S/C"}
                   {sinClasificar > 0 ? ` (${sinClasificar} S/C)` : ""}
@@ -534,7 +575,7 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
                   <li key={u.id_usuario}>
                     <FichaArrastrable
                       id={u.id_usuario}
-                      nombre={u.nombre}
+                      nombre={esUsuarioCamote(u) ? `${u.nombre} (Camote)` : u.nombre}
                       disabled={!puedeArrastrar}
                       onClick={() => {
                         if (puedeArrastrar) setTradeAbierto(u.id_usuario);
@@ -554,31 +595,43 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
           <h2 className="mb-2 font-display text-lg font-bold">Bolsa / banquillo ({bolsa.length})</h2>
           {jornada.draft_estado === "en_curso" && (
             <p className="mb-2 text-xs text-mist">
-              Si los cupos se llenan, quien siga acá entra al azar a un equipo. Ese equipo juega con un jugador más.
+              Si los cupos se llenan, quien siga acá entra al azar a un equipo. Los Camotes entran solos al cerrar el draft.
             </p>
           )}
           {error && <p className="mb-2 text-sm text-card-red">{error}</p>}
           <ul className="flex flex-col divide-y divide-pitch-800">
-            {bolsa.map((u) => (
-              <li key={u.id_usuario}>
-                <button
-                  disabled={jornada.draft_estado !== "en_curso" || !esMiTurno || cargando}
-                  onClick={() => setCandidato(u)}
-                  className="flex w-full items-center justify-between py-3 text-left disabled:opacity-40"
-                >
-                  <span>
-                    <span className="block text-sm font-medium">{u.nombre}</span>
-                    <span className="block text-xs text-mist">
-                    {u.edad ? `${u.edad} años` : "Edad no registrada"}
-                    {u.posicion ? ` · ${u.posicion}` : ""}
-                  </span>
-                  </span>
-                  <span className="font-display text-sm font-bold text-turf-400">
-                    {ratings[u.id_usuario] ? ratings[u.id_usuario].toFixed(1) : "S/C"}
-                  </span>
-                </button>
-              </li>
-            ))}
+            {bolsa.map((u) => {
+              const esTop = topsPresentesSet.has(u.id_usuario);
+              const bloqueadoPorTop = jornada.draft_estado === "en_curso" && esTop && equipoTurnoLlenoDeTops;
+              return (
+                <li key={u.id_usuario}>
+                  <button
+                    disabled={jornada.draft_estado !== "en_curso" || !esMiTurno || cargando || bloqueadoPorTop}
+                    onClick={() => setCandidato(u)}
+                    className="flex w-full items-center justify-between py-3 text-left disabled:opacity-40"
+                  >
+                    <span>
+                      <span className="block text-sm font-medium">
+                        {u.nombre}
+                        {esTop && (
+                          <span className="ml-2 rounded-pill bg-turf-500/20 px-2 py-0.5 text-xs font-bold text-turf-400">
+                            ★ Top
+                          </span>
+                        )}
+                      </span>
+                      <span className="block text-xs text-mist">
+                        {u.edad ? `${u.edad} años` : "Edad no registrada"}
+                        {u.posicion ? ` · ${u.posicion}` : ""}
+                        {bloqueadoPorTop ? ` · 🔒 Tope de tops alcanzado (${maxTopsPorEquipo})` : ""}
+                      </span>
+                    </span>
+                    <span className="font-display text-sm font-bold text-turf-400">
+                      {ratings[u.id_usuario] ? ratings[u.id_usuario].toFixed(1) : "S/C"}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
             {bolsa.length === 0 && <p className="py-4 text-sm text-mist">La bolsa está vacía.</p>}
           </ul>
           {jornada.draft_estado === "en_curso" && !esMiTurno && (
@@ -600,7 +653,7 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
           )}
           {bolsa.length > 0 &&
             (jornada.draft_estado === "finalizado" ||
-              equipos.every((e) => e.cupo_max != null && rosterDe(e.id_equipo).length >= e.cupo_max)) && (
+              equipos.every((e) => e.cupo_max != null && rosterDe(e.id_equipo).filter((u) => !esUsuarioCamote(u)).length >= e.cupo_max)) && (
             <button
               onClick={colocarSobrantes}
               disabled={cargando}
@@ -654,7 +707,6 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
         </div>
       )}
 
-      {/* Confirmación de pick */}
       {candidato && (
         <div className="fixed inset-0 z-20 flex items-center justify-center bg-pitch-950/80 p-6 backdrop-blur-sm" onClick={() => setCandidato(null)}>
           <div className="w-full max-w-sm rounded-2xl border border-pitch-700 bg-pitch-900 p-6 text-center" onClick={(e) => e.stopPropagation()}>
@@ -679,7 +731,6 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
         </div>
       )}
 
-      {/* Mover jugador (cambios post-draft) */}
       {tradeAbierto && (
         <div className="fixed inset-0 z-20 flex items-end justify-center bg-pitch-950/80 backdrop-blur-sm" onClick={() => setTradeAbierto(null)}>
           <div className="w-full max-w-md rounded-t-2xl border-t border-pitch-700 bg-pitch-900 p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]" onClick={(e) => e.stopPropagation()}>
@@ -687,16 +738,23 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
             <ul className="flex flex-col gap-2">
               {equipos
                 .filter((e) => e.id_equipo !== asistenciaPorUsuario[tradeAbierto]?.id_equipo)
-                .map((e) => (
-                  <li key={e.id_equipo}>
-                    <button
-                      onClick={() => mover(tradeAbierto, e.id_equipo)}
-                      className="w-full rounded bg-pitch-800 px-3 py-2 text-left text-sm"
-                    >
-                      Equipo de {usuariosMap[e.id_capitan ?? ""]?.nombre}
-                    </button>
-                  </li>
-                ))}
+                .map((e) => {
+                  const uMover = usuariosMap[tradeAbierto];
+                  const esTopMover = uMover && !esUsuarioCamote(uMover) && topsPresentesSet.has(tradeAbierto);
+                  const bloqueadoDestino = Boolean(esTopMover && topsDeEquipo(e.id_equipo) >= maxTopsPorEquipo);
+                  return (
+                    <li key={e.id_equipo}>
+                      <button
+                        disabled={bloqueadoDestino}
+                        onClick={() => mover(tradeAbierto, e.id_equipo)}
+                        className="w-full rounded bg-pitch-800 px-3 py-2 text-left text-sm disabled:opacity-40"
+                      >
+                        Equipo de {usuariosMap[e.id_capitan ?? ""]?.nombre}
+                        {bloqueadoDestino ? ` (🔒 tope de ${maxTopsPorEquipo} top)` : ""}
+                      </button>
+                    </li>
+                  );
+                })}
               <li>
                 <button onClick={() => mover(tradeAbierto, null)} className="w-full rounded border border-dashed border-pitch-700 px-3 py-2 text-left text-sm text-mist">
                   Devolver a la bolsa

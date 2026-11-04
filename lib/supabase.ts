@@ -1,12 +1,6 @@
-"use client";
-
 import { createClient } from "@supabase/supabase-js";
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
 
-// Cliente de navegador: usa la anon key, solo puede LEER (ver políticas RLS
-// en supabase/schema.sql). Toda escritura pasa por /api/* con la service role.
-export const supabase = createClient(url, anonKey, {
-  auth: { persistSession: false },
-});
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);

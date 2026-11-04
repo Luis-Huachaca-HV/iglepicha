@@ -9,12 +9,13 @@ function soles(valor: number) {
   return `S/ ${valor.toFixed(2)}`;
 }
 
+function esUsuarioCamote(u: { edad: number | null; es_camote?: boolean } | undefined): boolean {
+  return Boolean(u?.es_camote && typeof u.edad === "number" && u.edad < 12);
+}
+
 export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
   const [jornada, setJornada] = useState<Jornada | null>(null);
 
-  // Canal SIEMPRE activo (no depende de tener ya una jornada cargada):
-  // avisa al instante si nace una jornada nueva en cualquier dispositivo
-  // (Reiniciar todo / Comenzar jornada nueva), sin esperar el sondeo de 5s.
   useEffect(() => {
     const canalNuevaJornada = supabase
       .channel(`jornada-nueva-${Math.random().toString(36).slice(2)}`)
@@ -51,7 +52,7 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
     fetch("/api/jornada/active", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (!d?.jornada) return; // sondeo fallido: nunca borrar lo que ya está en pantalla
+        if (!d?.jornada) return;
         setJornada(d.jornada);
         cargarEquiposYAsistencias(d.jornada.id_jornada);
       })
@@ -70,9 +71,6 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
       });
   }, [cargarEquiposYAsistencias]);
 
-  // Red de seguridad si Realtime se cae (redes de celular, pantalla
-  // bloqueada). No toca costoInput para no pisar lo que el admin esté
-  // escribiendo — solo refresca jornada/equipos/asistencias.
   useEffect(() => {
     const id = setInterval(cargarJornada, 5000);
     function alVolver() {
@@ -80,9 +78,6 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
     }
     document.addEventListener("visibilitychange", alVolver);
     window.addEventListener("focus", alVolver);
-    // Safari/iOS a veces restaura la página "congelada" desde el gesto de
-    // volver atrás (bfcache) en vez de recargarla — sin esto, se queda con
-    // datos de una jornada que ya no existe.
     function alRestaurarBfcache(e: PageTransitionEvent) {
       if (e.persisted) alVolver();
     }
@@ -183,14 +178,19 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
 
   if (!jornada) return <p className="text-mist">Cargando…</p>;
 
-  const presentes = asistencias.filter((a) => a.presente).length;
-  const cuotaBase = presentes > 0 ? (jornada.costo_total || 0) / presentes : 0;
+  const titularesPresentes = asistencias.filter(
+    (a) => a.presente && !esUsuarioCamote(usuariosMap[a.id_usuario])
+  ).length;
+  const cuotaBase = titularesPresentes > 0 ? (jornada.costo_total || 0) / titularesPresentes : 0;
   const extraTicket = Number(precioTicket) || 0;
-  const cuotaDe = (ticket: boolean | undefined) => cuotaBase + (ticket ? extraTicket : 0);
+  const cuotaDe = (a: AsistenciaDraft) => {
+    const camote = esUsuarioCamote(usuariosMap[a.id_usuario]);
+    return (camote ? 0 : cuotaBase) + (a.ticket_adicional ? extraTicket : 0);
+  };
 
   const totalRecaudado = equiposVisibles.reduce((suma, e) => {
     const roster = rosterDe(e.id_equipo);
-    return suma + roster.filter((a) => a.pago_realizado).reduce((parcial, a) => parcial + cuotaDe(a.ticket_adicional), 0);
+    return suma + roster.filter((a) => a.pago_realizado).reduce((parcial, a) => parcial + cuotaDe(a), 0);
   }, 0);
 
   const todoConcluido = equipos.length > 0 && equipos.every((e) => e.pago_entregado_admin);
@@ -243,7 +243,9 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
               className="w-24 rounded border border-pitch-700 bg-pitch-950 px-2 py-2 text-center disabled:opacity-40"
             />
           </label>
-          <p className="mt-2 text-xs text-mist">Cuota = costo de la cancha / asistentes, más el ticket verde de quien lo marcó.</p>
+          <p className="mt-2 text-xs text-mist">
+            Cuota = costo de la cancha / titulares presentes (los Camotes no pagan cancha), más el ticket verde de quien lo marcó.
+          </p>
           {error && <p className="mt-2 text-sm text-card-red">{error}</p>}
           <button
             onClick={guardarCosto}
@@ -258,8 +260,9 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
       <div className="flex flex-col gap-4">
         {equiposVisibles.map((e) => {
           const roster = rosterDe(e.id_equipo);
-          const pagados = roster.filter((a) => a.pago_realizado).length;
-          const todosPagaron = roster.length > 0 && pagados === roster.length;
+          const cobrables = roster.filter((a) => !esUsuarioCamote(usuariosMap[a.id_usuario]) || a.ticket_adicional);
+          const pagados = cobrables.filter((a) => a.pago_realizado).length;
+          const todosPagaron = cobrables.length > 0 && pagados === cobrables.length;
           return (
             <div
               key={e.id_equipo}
@@ -268,29 +271,47 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
               <div className="mb-2 flex items-center justify-between">
                 <span className="font-display font-bold">Equipo de {usuariosMap[e.id_capitan ?? ""]?.nombre ?? "?"}</span>
                 <span className="text-xs text-mist">
-                  {soles(e.cuota_equipo || 0)} · {pagados}/{roster.length} pagaron
+                  {soles(e.cuota_equipo || 0)} · {pagados}/{cobrables.length} pagaron
                 </span>
               </div>
 
               <ul className="flex flex-col divide-y divide-pitch-800">
-                {roster.map((a) => (
-                  <li key={a.id_usuario} className="flex items-center justify-between py-2">
-                    <span className="text-sm">
-                      {usuariosMap[a.id_usuario]?.nombre ?? "?"}
-                      <span className="ml-2 text-xs text-mist">{soles(cuotaDe(a.ticket_adicional))}</span>
-                      {a.ticket_adicional && <span className="ml-2 text-xs font-bold text-turf-400">Ticket</span>}
-                    </span>
-                    <button
-                      disabled={bloqueado || !puedeMarcarPago || a.pago_realizado}
-                      onClick={() => setConfirmarPago({ id_usuario: a.id_usuario, nombre: usuariosMap[a.id_usuario]?.nombre ?? "?" })}
-                      className={`rounded-pill px-3 py-2.5 text-xs font-bold transition disabled:opacity-60 ${
-                        a.pago_realizado ? "bg-turf-500 text-pitch-950" : "border border-pitch-700 text-mist"
-                      }`}
-                    >
-                      {a.pago_realizado ? "✓ Pagó" : "Debe"}
-                    </button>
-                  </li>
-                ))}
+                {roster.map((a) => {
+                  const camote = esUsuarioCamote(usuariosMap[a.id_usuario]);
+                  const monto = cuotaDe(a);
+                  const exento = camote && !a.ticket_adicional;
+                  return (
+                    <li key={a.id_usuario} className="flex items-center justify-between py-2">
+                      <span className="text-sm">
+                        {usuariosMap[a.id_usuario]?.nombre ?? "?"}
+                        {exento ? (
+                          <span className="ml-2 rounded-pill bg-floodlight/15 px-2 py-0.5 text-xs font-bold text-floodlight">
+                            Camote · no paga
+                          </span>
+                        ) : (
+                          <span className="ml-2 text-xs text-mist">{soles(monto)}</span>
+                        )}
+                        {camote && a.ticket_adicional && (
+                          <span className="ml-2 text-xs font-bold text-floodlight">Camote</span>
+                        )}
+                        {a.ticket_adicional && <span className="ml-2 text-xs font-bold text-turf-400">Ticket</span>}
+                      </span>
+                      {exento ? (
+                        <span className="rounded-pill border border-pitch-700 px-3 py-2 text-xs text-mist">Exento</span>
+                      ) : (
+                        <button
+                          disabled={bloqueado || !puedeMarcarPago || a.pago_realizado}
+                          onClick={() => setConfirmarPago({ id_usuario: a.id_usuario, nombre: usuariosMap[a.id_usuario]?.nombre ?? "?" })}
+                          className={`rounded-pill px-3 py-2.5 text-xs font-bold transition disabled:opacity-60 ${
+                            a.pago_realizado ? "bg-turf-500 text-pitch-950" : "border border-pitch-700 text-mist"
+                          }`}
+                        >
+                          {a.pago_realizado ? "✓ Pagó" : "Debe"}
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
                 {roster.length === 0 && <p className="py-2 text-xs text-mist">Sin jugadores asignados.</p>}
               </ul>
 
@@ -321,7 +342,6 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
         )}
       </div>
 
-      {/* Confirmación: marcar pago de un jugador (sin vuelta atrás) */}
       {confirmarPago && (
         <div className="fixed inset-0 z-20 flex items-center justify-center bg-pitch-950/80 p-6 backdrop-blur-sm" onClick={() => setConfirmarPago(null)}>
           <div className="w-full max-w-sm rounded-2xl border border-pitch-700 bg-pitch-900 p-6 text-center" onClick={(e) => e.stopPropagation()}>
@@ -340,7 +360,6 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
         </div>
       )}
 
-      {/* Confirmación: capitán entregó el total al admin (sin vuelta atrás) */}
       {confirmarEntrega && (
         <div className="fixed inset-0 z-20 flex items-center justify-center bg-pitch-950/80 p-6 backdrop-blur-sm" onClick={() => setConfirmarEntrega(null)}>
           <div className="w-full max-w-sm rounded-2xl border border-pitch-700 bg-pitch-900 p-6 text-center" onClick={(e) => e.stopPropagation()}>
