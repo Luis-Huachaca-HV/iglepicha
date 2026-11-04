@@ -10,7 +10,8 @@
     "test": "node --experimental-strip-types --test lib/draft-capacidad.test.ts",
     "cf:build": "opennextjs-cloudflare build",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy -- --keep-vars"
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy -- --keep-vars",
+    "postinstall": "node scripts-patch-opennext.mjs"
   },
   "engines": {
     "node": ">=20.19.0"
