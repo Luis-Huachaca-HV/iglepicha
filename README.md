@@ -1,617 +1,67 @@
-# App_Gestion_Pichangas — MVP
+# Gestión de Pichangas
 
-Gestión de eventos de fútbol (pichangas): login por nombre + PIN, dashboard
-con cronómetro y contadores en vivo, y checklist de asistencia con filtros
-demográficos y radar de stats por jugador.
+## Descripción
 
-**Alcance construido:** las 6 pestañas del spec original — Auth + Dashboard
-+ Jugadores + Draft + Partidos + Cobranza + Configuraciones.
+Tengo este archivo md de un proyecto que he creado, para que analices el contexto, asi mismo puedo enviarte el repositorio de github o como podrias verlo para conectarlo?# App_Gestion_Pichangas — Contexto completo (v2) Documento para retomar el proyecto en cualquier conversación nueva con Claude.
 
 ## Stack
 
-- Next.js 14 (App Router) + TypeScript + Tailwind
-- Supabase (Postgres + Realtime) — sin Supabase Auth, login custom por PIN
-- Pensado para deploy en Vercel
+React 19 · TypeScript · Vite · Tailwind CSS · PWA
 
-## 1. Crear el proyecto en Supabase
+## Estructura
 
-1. Ve a [supabase.com](https://supabase.com) → **New project**. Elige nombre,
-   contraseña de base de datos y región (elige la más cercana a Perú, p.ej.
-   `sa-east-1`).
-2. Cuando el proyecto esté listo, entra a **SQL Editor** → **New query**,
-   pega todo el contenido de `supabase/schema.sql` y ejecútalo (▶ Run).
-   Esto crea todas las tablas, tipos y políticas de seguridad (RLS).
+- `/src/App.tsx` — punto de entrada
+- `/src/components/AppShell.tsx` — Shell móvil con safe-area, TopBar, navegación inferior por rol, estado de conexión y contenedor de las pantallas privadas.
+- `/src/components/LoginScreen.tsx` — Inicio de sesión propio con selección de jugador y PIN de cuatro dígitos según el rol.
+- `/src/components/DashboardScreen.tsx` — Resumen de la jornada actual con cronómetro, presentes, equipos, creador, estado y acciones administrativas de inicio, finalización y nueva jornada.
+- `/src/components/PlayersScreen.tsx` — Gestión de jugadores, asistencia confirmada, filtros por edad, alta rápida, capitanes, posición, valoración y asignación de equipos.
+- `/src/components/DraftScreen.tsx` — Draft por turnos donde solo el capitán correspondiente o el super_admin puede elegir jugadores elegibles con asistencia.
+- `/src/components/MatchesScreen.tsx` — Cola de partidos, cronómetro, silbato accesible, marcador editable por eventos, reinicio de prueba e historial por fecha y hora.
+- `/src/components/PaymentsScreen.tsx` — Cobranza en dos niveles: jugadores pagan a su capitán y capitanes entregan el total al admin, con confirmaciones irreversibles.
+- `/src/components/SettingsScreen.tsx` — Configuración administrativa de usuarios, roles, PIN, duración, mercado de pases y reinicio total protegido por confirmación escrita.
+- `/src/components/RatingRadar.tsx` — Widget reutilizable para mostrar los nueve atributos de valoración de un jugador mediante radar y resumen numérico.
+- `/src/components/RealtimeStatus.tsx` — Indicador reutilizable de sincronización, reintentos, jornada reiniciada desde otro dispositivo y recuperación al volver a primer plano.
+- `/src/components/ConfirmActionDialog.tsx` — Diálogo accesible para asistencia, pagos irreversibles, finalización y escribir REINICIAR antes del borrado de la jornada actual.
 
-   > **¿Ya habías corrido `schema.sql` antes (versión sin Draft)?** No lo
-   > vuelvas a correr — en vez de eso corre solo
-   > `supabase/migrations/002_draft.sql`, que agrega las columnas nuevas
-   > sin tocar lo que ya tenías.
-
-   Si tu proyecto ya estaba creado con una versión anterior de esta app,
-   ejecuta también `supabase/migrations/010_proteger_pin_hash.sql`. Es una
-   migración de seguridad: deja de publicar hashes de PIN por Realtime.
-3. Ve a **Project Settings → API** y copia:
-   - `Project URL` → será `NEXT_PUBLIC_SUPABASE_URL`
-   - `anon public` key → será `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `service_role` key (sección "Project API keys", **secreta**) →
-     será `SUPABASE_SERVICE_ROLE_KEY`
-
-## 2. Crear tus primeros usuarios
-
-Por ahora (fase MVP) los usuarios se crean directo en Supabase — la pantalla
-de administración (tab Configuraciones) es la siguiente fase. En **Table
-Editor → usuarios**, inserta filas con:
-
-| nombre | edad | rol_sistema | pin_hash |
-|---|---|---|---|
-| Axl | 30 | super_admin | *(dejar vacío)* |
-| Un jugador cualquiera | 24 | jugador_registrado | *(dejar vacío)* |
-
-Deja `pin_hash` vacío: la app te pedirá crear tu PIN la primera vez que
-entres (para los roles `super_admin`, `admin` y `capitan`). Los
-`jugador_registrado` entran solo tocando su nombre, sin PIN.
-
-## 3. Configurar variables de entorno localmente
-
-```bash
-cp .env.local.example .env.local
-```
-
-Completa los tres valores de Supabase del paso 1, y agrega un cuarto:
-
-```
-SESSION_SECRET=algo-largo-y-aleatorio
-```
-
-(puedes generarlo con `openssl rand -hex 32`). Se usa para firmar la cookie
-de sesión — sin esto cualquiera podría falsificarla.
-
-## 4. Correr en local
+## Instalación
 
 ```bash
 npm install
-npm run dev
+npm run dev    # desarrollo (Vite)
+npm run build  # build de producción → dist/
 ```
 
-Abre [http://localhost:3000](http://localhost:3000).
+## Variables de entorno
 
-## 5. Subir a GitHub y desplegar en Vercel
+Copia `.env.example` a `.env.local` y completa:
 
-```bash
-git init
-git add .
-git commit -m "MVP: auth, dashboard, jugadores"
-git branch -M main
-git remote add origin https://github.com/TU-USUARIO/pichangas-app.git
-git push -u origin main
-```
+- `VITE_SUPABASE_URL` — URL de tu proyecto Supabase (Settings → API).
+- `VITE_SUPABASE_ANON_KEY` — anon/publishable key del mismo proyecto.
 
-Luego en [vercel.com](https://vercel.com):
-1. **Add New → Project** → importa el repo de GitHub.
-2. En **Environment Variables**, agrega las 4 variables de `.env.local`
-   (las 3 de Supabase + `SESSION_SECRET`).
-3. Deploy. Cada push a `main` vuelve a desplegar automáticamente (mismo
-   patrón que usas en tus otros proyectos).
+Las variables `VITE_*` son públicas en el navegador: **nunca** pongas la `service_role` ni otros secretos aquí.
 
-## Desplegar en Cloudflare Workers
+## Conexión Supabase (manual)
 
-La app está configurada para Cloudflare Workers mediante OpenNext. No usa
-R2 porque sus pantallas y rutas de API leen el estado actual de Supabase.
+1. Crea (o reutiliza) un proyecto en [supabase.com](https://supabase.com) y copia URL + anon key a `.env.local`.
+2. Aplica los SQL de `/supabase/migrations` en orden (SQL Editor del dashboard, o `supabase db push` con la CLI).
+3. Si el repo trae `/supabase/functions`, publícalas con `supabase functions deploy <nombre>` (CLI logueada en tu proyecto).
+4. Configura los secrets que cada function lea con `Deno.env.get(...)` en Dashboard → Edge Functions → Secrets.
 
-```bash
-npm ci
-npm run cf:build       # genera el Worker en .open-next
-npm run preview        # lo prueba localmente con el runtime de Cloudflare
-npm run deploy         # despliega (requiere iniciar sesión en Wrangler)
-```
+## Deploy en Vercel
 
-Para despliegues desde GitHub, crea un proyecto **Workers** en Cloudflare.
-En **Build settings** usa `npx @opennextjs/cloudflare build` como Build
-command y `npx @opennextjs/cloudflare deploy -- --keep-vars` como Deploy
-command. Configura estas variables en dos lugares: **Build variables and
-secrets** (para que Next pueda compilar) y **Variables and Secrets** del
-Worker (para que existan en runtime):
+1. Importa el repositorio en [vercel.com](https://vercel.com) (framework: Vite).
+2. Build command `npm run build`, output `dist/`.
+3. Carga las variables `VITE_*` de `.env.example` en Settings → Environment Variables.
+4. En Supabase → Auth → URL Configuration agrega el dominio de Vercel a los redirects si tu app usa login.
 
-| Variable | Tipo recomendado |
-| --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` | Variable |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Variable |
-| `SUPABASE_SERVICE_ROLE_KEY` | Secret |
-| `SESSION_SECRET` | Secret |
+## Integración continua
 
-Agrega las cuatro para producción y, si usas previews, también para el
-entorno Preview. No subas `.env.local` ni `.dev.vars`: ambos están ignorados
-por Git. Cloudflare Workers ejecuta esta app con compatibilidad de Node.js,
-necesaria para las cookies firmadas y hashes de PIN.
+El workflow `.github/workflows/cosmos-build.yml` valida el build en cada push y, si falta `package-lock.json`, lo genera y propone un PR con el lockfile.
 
-## Nota de seguridad (léela antes de usar esto con plata real)
+## Navegación
 
-Este MVP resuelve el login con un hash de PIN + cookie firmada — suficiente
-para probar con tu grupo de pichanga, pero antes de que la Cobranza (pagos)
-dependa de esto conviene:
-- Limitar intentos de PIN (actualmente no hay rate-limiting).
-- Rotar `SESSION_SECRET` y usar `httpOnly` + `secure` cookies en producción
-  (ya está `secure` activado automáticamente cuando `NODE_ENV=production`,
-  que Vercel setea solo).
-- Revisar los permisos de cada API route a medida que se agreguen Draft,
-  Partidos y Cobranza (Cobranza en particular debe quedar bloqueada
-  durante el juego, como pide el spec original).
+SPA con React Router y fallback de navegación para publicación.
 
-## Cómo funciona el Draft
+---
 
-1. En Jugadores, el admin elige capitanes → se crean los `equipos_jornada`.
-2. En Draft, con el estado "no iniciado", el admin define el **cupo máximo**
-   de cada equipo y toca "Iniciar draft". Esto fija el orden de turno (por
-   orden de creación de equipo) y asigna a cada capitán a su propio equipo.
-3. En cada turno, **solo el capitán del equipo en turno (o un admin)** puede
-   tocar un jugador de la bolsa. Aparece un pop-up de confirmación; al
-   confirmar, el jugador queda bloqueado a ese equipo y el turno avanza al
-   siguiente equipo con cupo disponible (salta a los que ya se llenaron).
-4. El promedio de rating por equipo se recalcula en vivo (excluye jugadores
-   "S/C" sin votos, para no ensuciar el promedio).
-5. Cuando se llenan todos los cupos o se vacía la bolsa, el draft se marca
-   "finalizado". Ahí el admin puede activar **"Permitir cambios
-   post-draft"**: con eso encendido, tocar el nombre de un jugador en su
-   equipo abre un selector para moverlo a otro equipo o devolverlo a la
-   bolsa.
-
-## Cómo funciona Partidos
-
-1. Al terminar el Draft, el admin toca **Iniciar jornada** en el Dashboard.
-   En ese momento se arma la **cola** con el orden del draft y se sortean
-   los dos equipos del primer partido. Visitar Partidos antes de iniciar no
-   modifica nada.
-2. El admin define la duración (minutos) y toca "Iniciar partido" — arranca
-   el cronómetro y el marcador en 0-0.
-3. Admin o capitán registran goles/faltas con los botones ⚽/🟨, eligiendo
-   al jugador desde la lista de ambos equipos. El marcador se recalcula
-   solo a partir de los eventos — si te equivocaste, el admin puede borrar
-   el evento desde el timeline y el marcador se corrige automáticamente.
-4. Cuando el cronómetro llega a 00:00 suena un silbato local en cada
-   dispositivo (no depende de internet ni de ningún archivo de audio).
-5. El admin toca "Finalizar partido": si hay un ganador claro, el
-   **perdedor va al final de la cola** y el **siguiente equipo en la cola**
-   entra a jugar contra el ganador (que se queda en cancha). Si hay empate,
-   aparece un selector para que el admin decida manualmente quién sigue —
-   no hay desempate automático, tal como pide el spec.
-
-## Agregar y administrar usuarios desde la app
-
-Ya no hace falta tocar Supabase para esto — todo vive en **Configuraciones**
-(solo visible para admin y super_admin):
-
-- **Agregar usuario**: nombre, edad opcional y rol. Un admin normal solo
-  puede crear jugadores y capitanes; solo un **super_admin** puede crear
-  otros admin o super_admin.
-- **Cambiar el rol** de cualquier usuario ya existente, con la misma
-  restricción de arriba.
-- **Resetear PIN**: el botón que resuelve el "olvidé mi PIN" sin entrar a
-  Supabase — borra el PIN guardado y la próxima vez que esa persona toque
-  su nombre en el login, la app le pide crear uno nuevo.
-- (En Jugadores sigue existiendo el botón rápido "+ Agregar jugador" para
-  altas veloces en cancha — crea siempre con rol jugador, sin PIN.)
-
-## Otras configuraciones
-
-- **Tiempo global de la jornada**: el cronómetro del Dashboard. Solo se
-  puede cambiar mientras la jornada está "pendiente" (antes de tocar
-  "Iniciar jornada"), para no desincronizar un cronómetro que ya corre.
-- **Duración por defecto del mini-partido**: se aplica a cada partido nuevo
-  que arma la cola en Partidos. Se puede seguir ajustando manualmente por
-  partido individual al iniciarlo, como ya hacía antes.
-- **Mercado de pases**: el mismo toggle "permitir cambios post-draft" que
-  ya vive en Draft, disponible acá también por conveniencia.
-
-## Con esto están las 6 pestañas del spec original
-
-Auth → Dashboard → Jugadores → Draft → Partidos → Cobranza → Configuraciones.
-De acá en adelante son mejoras sobre lo ya construido (pulir UI, agregar
-validaciones, indicadores adicionales) más que tabs nuevas — avísame qué
-quieres ajustar después de probarlo en cancha.
-
-## Correcciones de bugs
-
-- **Partidos en bucle**: al finalizar un partido, a veces se creaba el
-  siguiente usando el orden original del Draft en vez de la cola real,
-  repitiendo el mismo cruce. Ahora el siguiente partido SIEMPRE lo arma
-  `/api/partidos/finalizar` con la cola correcta; si la pantalla lo está
-  esperando, reintenta sola cada 1.5s en vez de mostrar una pantalla muerta.
-- **PIN trabado al reintentar**: si ingresabas mal el PIN, los 4 puntos se
-  quedaban llenos y no dejaba tocar más números. Ahora se limpia solo en
-  cuanto aparece un error, para poder reintentar de inmediato.
-- **Nuevo: "Reiniciar partido" (solo pruebas)**: botón para admin en
-  Partidos que vuelve el partido actual a 0-0 y borra su timeline, sin
-  tocar la cola ni el draft — útil para salir de un partido a medio probar
-  sin tener que completarlo.
-## Corrección importante: Realtime no estaba habilitado en la base de datos
-
-Esta era la causa raíz de que los jugadores nuevos (y en general cualquier
-cambio en vivo) no aparecieran sin recargar. El código siempre estuvo bien
-suscrito, pero Supabase no envía ningún aviso a menos que la tabla esté
-agregada a la publicación `supabase_realtime` — es un interruptor a nivel
-de base de datos, no de código, que hasta ahora nadie había activado.
-
-`supabase/migrations/006_realtime.sql` habilita las tablas de jornada que
-la app escucha en vivo (`jornadas`, `equipos_jornada`,
-`asistencia_draft`, `mini_partidos`, `eventos_partido`). La lista de
-usuarios se consulta por una API segura y se refresca cada 5 segundos o al
-volver a la app; así un hash de PIN nunca llega al navegador.
-
-## Mensajes de confirmación
-
-Al agregar un jugador (desde Jugadores o Configuraciones) o resetear un
-PIN, aparece un mensaje breve tipo "✓ Jugador agregado" en la parte de
-abajo de la pantalla.
-
-## Altas tardías durante la preparación
-
-Mientras la jornada está pendiente —incluido el Draft—, desde Jugadores
-el admin (o el capitán en su propio equipo) puede sumar o quitar a alguien.
-Así una llegada tardía puede marcarse presente y aparecer en la bolsa del
-Draft. Al iniciar la jornada, asistencia y equipos quedan bloqueados para
-que los partidos y la cobranza tengan una base fija.
-
-## Diseño para celular: notch / Dynamic Island
-
-Se agregó soporte de "safe area" (el margen que iOS reserva alrededor del
-notch, la Dynamic Island y la barra de inicio) en toda la app: la barra
-superior, el menú inferior, el login y todos los paneles que se abren
-desde abajo respetan ese margen para que ningún botón quede tapado o
-pegado al borde. También se agrandaron los botones más pequeños (el
-check de asistencia, el toggle de pagado, los inputs numéricos) a un
-tamaño cómodo para tocar con el dedo.
-
-## Corrección importante: rutas de la API se estaban "congelando" en el build
-
-Esto era la causa real de que resetear tu PIN a NULL no se reflejara, y
-podía afectar más cosas de forma silenciosa. Next.js, por defecto, puede
-detectar que una ruta de API "no depende de nada dinámico" y la convierte
-en estática: la ejecuta UNA vez durante el build en Vercel y sirve esa
-misma respuesta congelada a todo el mundo después, sin volver a consultar
-Supabase — no es un problema de conexión, es una optimización de Next.js
-que en este caso jugaba en contra.
-
-Ahora **todas** las rutas de `/api/*` tienen `export const dynamic =
-"force-dynamic"`, que le dice a Next.js "esta ruta siempre se ejecuta
-fresca, nunca la guardes". Lo puedes confirmar vos mismo: en la salida de
-`npm run build`, cada ruta bajo `/api/` debe aparecer marcada con `ƒ`
-(Dynamic) — si alguna vez ves una marcada `○` (Static), avísame.
-
-## Corrección: "Finalizar jornada" no se quedaba finalizada
-
-Dos problemas juntos causaban esto:
-
-1. El botón fallaba en silencio si la petición no se completaba bien — ya
-   no: ahora muestra un mensaje de error abajo si algo sale mal, y
-   confirma el cambio contra la base de datos (no solo contra la
-   respuesta del click) antes de darlo por hecho.
-2. **La causa de fondo**: apenas una jornada quedaba "finalizada",
-   `/api/jornada/active` creaba automáticamente una jornada NUEVA en
-   blanco la siguiente vez que cualquier pantalla la consultaba — así que
-   Cobranza, Draft, etc. "perdían" la jornada que acababas de cerrar y
-   parecía que nunca se había finalizado. Ahora eso ya no pasa solo: la
-   app se queda mostrando la jornada finalizada (con Cobranza ya
-   desbloqueada) hasta que el admin toca el nuevo botón **"Comenzar
-   jornada nueva"** en el Dashboard. Recién ahí se crea una jornada en
-   blanco de verdad.
-
-También se agregó un mensaje "🎉 ¡Gracias! Todos pagaron" en Cobranza que
-aparece solo cuando todos los jugadores con equipo asignado marcaron
-"Pagó".
-
-## Reglas de asistencia, draft y qué se conserva
-
-- **Cada "Nueva jornada" arranca en cero**: equipos, draft, cobranza y
-  partidos del día — todo nuevo. Lo único que persiste siempre son los
-  **usuarios** (jugadores) y el **historial de partidos** finalizados
-  (por fecha y hora), visible al final de la pestaña Partidos.
-- **Draft muestra en vivo quién falta**: en la pantalla de configuración
-  del draft aparece "Faltan N: nombre, nombre…" con los que aún no
-  marcaste presentes, actualizado al instante.
-- **Asistencia bloqueada una vez en el draft**: puedes desmarcar "presente"
-  libremente (por si te equivocaste) mientras esa persona no esté en
-  ningún equipo. En cuanto el draft la asigna a un equipo, el botón se
-  bloquea (🔒) — hay que sacarla del equipo primero (desde el detalle del
-  jugador) si de verdad hay que corregirlo.
-
-## Corrección permanente: la app se "congelaba" o los bugs viejos volvían
-
-Si después de instalar una actualización seguías viendo un bug que ya
-habíamos corregido (el PIN, pantallas que no se actualizan), la causa más
-probable no era el código: era que tu celular tenía **guardada en caché
-una versión vieja** de la app, así que seguía corriendo el JavaScript de
-antes aunque el servidor ya tuviera el arreglo.
-
-Esto ya no debería volver a pasar — `next.config.mjs` ahora fuerza:
-- Cero caché de navegación dentro de la app (`staleTimes` en 0): cada vez
-  que cambias de pestaña, se vuelve a pedir todo fresco, nunca se queda
-  con una foto vieja.
-- `Cache-Control: no-store` en todas las respuestas, para que ni el
-  navegador ni Vercel guarden nada.
-
-**Un solo paso manual, una sola vez**, para limpiar lo que tu iPhone ya
-tenía guardado de antes de este fix: en el iPhone, ve a Ajustes → Safari
-→ "Borrar historial y datos de sitios web" (o, más simple, abre la app en
-una pestaña de Navegación Privada para probar). Después de eso, con este
-fix instalado, no debería volver a necesitarse.
-
-## Corrección definitiva: la lista de jugadores no se actualizaba
-
-La causa real: de todos los datos de la app (equipos, asistencia,
-partidos, cobranza), la lista de **usuarios** era la única que pasaba por
-una ruta intermedia de Next.js (`/api/usuarios`) en vez de leerse directo
-de Supabase desde el navegador — y esa capa de más es la que venía dando
-problemas de caché una y otra vez, sin importar cuántos `no-store` le
-pusiéramos.
-
-Ahora `lib/useUsuarios.ts` consume `/api/usuarios` con `no-store` y tiene
-sondeo de respaldo cada 5 segundos. La ruta devuelve solo los datos que la
-pantalla necesita y el booleano `tiene_pin`, nunca el hash del PIN.
-
-## Correcciones: capitanes, permisos del draft, y el "reinicio" fantasma
-
-- **Capitán no veía Draft**: al elegir capitanes en Jugadores, ahora
-  también se les sube el rol a `capitan` en el sistema (antes solo se
-  anotaba en el equipo, sin tocar su rol). La próxima vez que ese jugador
-  entra, ya ve Draft, Partidos y Cobranza. Nunca degrada a alguien que ya
-  era admin/super_admin.
-- **El admin ya no puede elegir en el draft**: durante el draft en curso,
-  solo puede elegir el capitán del equipo en turno (el super_admin
-  conserva un permiso de respaldo por si hay que destrabar algo). El
-  admin normal participa en el setup (cupos, iniciar draft) y en activar
-  el mercado de pases al final — no en las elecciones en sí.
-- **"El draft se reinicia" al agregar un jugador**: la causa real era que,
-  si dos pantallas consultaban al mismo tiempo cuando todavía no existía
-  ninguna jornada, cada una podía crear la suya — dejando dos jornadas
-  "activas" en la base de datos. La pantalla que terminaba mostrando la
-  jornada vieja (recién creada, sin draft) parecía haberse reiniciado.
-  `supabase/migrations/007_una_jornada_activa.sql` limpia cualquier
-  duplicado que haya quedado (conservando la que tiene el draft real) y
-  agrega un candado a nivel de base de datos para que nunca puedan existir
-  dos jornadas activas a la vez.
-
-## Corrección: cambiar el rol de un capitán rompía el draft
-
-Configuraciones dejaba cambiarle el rol a cualquiera, incluido un capitán
-activo — pero eso solo tocaba su rol de sistema, sin sacarlo de ser
-`id_capitan` del equipo en la jornada actual. El resultado: Config decía
-"jugador" pero el Draft lo seguía mostrando como capitán, todo
-desincronizado. Ahora ese cambio de rol se **bloquea con un mensaje claro**
-mientras la persona siga capitaneando un equipo en la jornada activa — hay
-que sacarlo del equipo desde Jugadores/Draft primero. Si necesitas poder
-reemplazar a un capitán por otro directamente, dímelo y agrego ese botón.
-
-## Correcciones: login "pegado" al estado viejo, y doble-toque en Iniciar jornada
-
-- **Login mostraba el PIN viejo**: al tocar tu nombre, la pantalla de PIN
-  guardaba una "foto" fija de tu usuario en ese instante. Si alguien te
-  reseteaba el PIN o te cambiaba el rol MIENTRAS estabas parado en esa
-  pantalla, seguías viendo la versión vieja. Ahora esa pantalla lee tu
-  estado en vivo todo el tiempo, igual que el resto de la app.
-- **"Iniciar jornada" pedía dos toques**: le quité un paso extra
-  (`router.refresh()` + una segunda consulta) que ya no hacía falta desde
-  que se corrigió lo de las jornadas duplicadas — ahora el botón actualiza
-  la pantalla directo con la respuesta del primer toque, sin pasos de más
-  que puedan pisarse entre sí.
-
-## Cobranza de dos niveles (corregido según el flujo real)
-
-1. Al finalizar la jornada, el admin define el costo total → se reparte
-   entre equipos (capitanes).
-2. **Jugador → Capitán**: admin o el capitán de ese mismo equipo marcan si
-   un jugador pagó.
-   Ahora pide **confirmación** antes de marcarlo, y una vez marcado
-   **no se puede deshacer** (ni en botón ni en el servidor) — evita que un
-   mal click borre un pago ya confirmado. Los jugadores ya no pueden
-   automarcarse (solo capitán/admin, según pediste).
-3. **Capitán → Admin**: cuando todos los jugadores de un equipo pagaron,
-   el admin puede confirmar "Capitán entregó S/ X al admin"; también es
-   irreversible.
-   El mensaje "🎉 Todo concluido" ahora aparece cuando **todos los
-   capitanes** entregaron su total al admin (no cuando los jugadores le
-   pagaron a su capitán, que es un paso intermedio).
-
-## Posición y valoración de jugadores
-
-- Cada jugador tiene una **posición**: POR, DEF, MC o DEL. Se asigna desde
-  el detalle del jugador en Jugadores (solo admin).
-- Desde ahí mismo, admin o capitán pueden **poner o editar la valoración**
-  de cualquier jugador (los 9 atributos, 1-10) — ya no hace falta esperar
-  un sistema de votos entre todos.
-- El Draft ahora muestra **edad y posición** junto al nombre en la bolsa,
-  además de la valoración que ya mostraba.
-
-## Botón de reinicio total (zona de peligro en Configuraciones)
-
-Nuevo botón "Reiniciar todo" en Configuraciones (solo admin/super_admin),
-con confirmación. Borra la jornada actual completa —asistencia, equipos,
-capitanes, draft, partidos, cobranza— y arranca una en blanco, sin tocar
-nunca la tabla de usuarios. Es el mismo efecto que correr
-`reset-jornadas.sql` a mano en Supabase, pero como botón dentro de la app,
-para cuando algo quede atascado por un bug y no quieras depender de
-Supabase para destrabarlo.
-
-## Corrección importante: pantallas que no se enteraban de cambios de otro dispositivo
-
-Un capitán en su celular podía quedarse viendo "esperando a que el admin
-inicie el draft" aunque el admin ya lo hubiera iniciado desde otro
-dispositivo. La causa: en redes de celular (señal débil, pantalla
-bloqueada), la conexión en vivo de Supabase (Realtime) se puede caer sola
-sin avisar — y sin un plan B, la pantalla se queda pegada hasta que
-alguien la recarga a mano.
-
-Ahora Draft, Partidos, Jugadores y Cobranza tienen un respaldo: además de
-Realtime, cada una vuelve a consultar el estado real cada 5 segundos y
-también apenas la app vuelve a primer plano (cambias de app y regresas,
-desbloqueas el celular). Así, aunque la conexión en vivo se corte, la
-pantalla se autocorrige sola en segundos — nunca hace falta recargar la
-página ni tocar nada de caché.
-
-## Confirmación al marcar asistencia
-
-Marcar o quitar la asistencia de alguien en Jugadores ahora pide
-confirmación ("¿Confirmas que llegó [nombre]?" / "¿Quitar la asistencia de
-[nombre]?") antes de aplicar el cambio, para evitar un mal click.
-
-## Corrección definitiva: "PIN incorrecto" al verificar (no al crear)
-
-Bug real de código, no de caché ni de dispositivos. Al **verificar** un
-PIN ya creado, la app tenía un error clásico de React: por cómo estaba
-armado el `setTimeout` que dispara el envío, el último dígito tecleado a
-veces no llegaba a viajar en la verificación — así que el PIN correcto
-podía fallar siempre, en cualquier dispositivo. Por eso funcionaba la
-primera vez (al crear el PIN es un mecanismo distinto) pero fallaba
-después al querer usarlo. Ya corregido: ahora se envía exactamente el PIN
-recién tecleado, completo.
-
-## Corrección: mensaje confuso cuando la jornada cambió mientras tenías la pantalla abierta
-
-Si en un dispositivo tocabas "Reiniciar todo" o "Comenzar jornada nueva"
-mientras otra pantalla (tuya u otra persona) seguía con la jornada vieja
-abierta, esa pantalla vieja podía mostrar un error crudo de base de datos
-("violates foreign key constraint...") al intentar marcar asistencia o
-elegir en el draft — o el draft parecía "prenderse y apagarse solo" (el
-aviso automático cada 5s detectaba la jornada nueva y la mostraba encima).
-
-Ahora, en ese caso, la app muestra un mensaje claro ("Esta jornada ya no
-existe — recarga para ver la actual") y **se resincroniza sola** con la
-jornada real al instante, en vez de mostrar el error técnico. Sigue siendo
-buena idea evitar tocar "Reiniciar todo" mientras otro dispositivo está
-activamente marcando asistencia o en medio del draft — pero si pasa, ya no
-se rompe de forma confusa.
-
-## Corrección importante: el sondeo de respaldo podía "vaciar" la pantalla
-
-Esta era probablemente la causa real de "no se puede iniciar la jornada o
-el draft, se reinicia solo": el sondeo automático cada 5s (agregado para
-que Realtime tenga un respaldo) hacía `setJornada(d.jornada)` sin fijarse
-si esa respuesta era válida. Si esa consulta puntual fallaba o venía
-vacía por cualquier motivo (una red lenta, un límite de conexiones), la
-pantalla se quedaba en blanco/cargando de la nada — como si todo se
-hubiera reiniciado, sin que en realidad se haya tocado nada en la base de
-datos. Ahora ese sondeo **nunca pisa una pantalla buena con una respuesta
-fallida o vacía** — si algo sale mal, simplemente lo ignora y reintenta
-en el siguiente ciclo.
-
-## Asistencia bloqueada una vez iniciada la jornada
-
-Antes se podía seguir marcando presentes y agregando jugadores en
-cualquier momento. Ahora, en cuanto el admin toca "Iniciar jornada" en el
-Dashboard, la pestaña Jugadores bloquea asistencia, altas y cambios de
-equipo; el bloqueo se aplica tanto en pantalla como en el servidor.
-Mientras el draft está en curso (pero la jornada todavía no se inició
-desde el Dashboard), sigue estando todo abierto para sumar gente de último
-momento.
-
-## Corrección: la pantalla quedaba "congelada" al volver atrás en Safari
-
-Causa distinta a las anteriores: al usar el gesto de deslizar hacia atrás
-en Safari/iOS (o el botón atrás), el navegador a veces restaura una
-"foto" congelada de la página tal como estaba (con la jornada vieja en
-memoria) en vez de recargarla — esto se llama bfcache y ocurre por fuera
-de cualquier configuración de caché de Next.js o del servidor, es un
-comportamiento del navegador. Por eso podías reiniciar todo desde
-Configuraciones y, al volver a Jugadores con el gesto de atrás, seguir
-viendo (e interactuando con) la jornada que ya no existe.
-
-Ahora Dashboard, Jugadores, Draft, Partidos y Cobranza detectan
-específicamente ese caso (evento `pageshow` con `persisted`) y se
-resincronizan al instante apenas la página vuelve a mostrarse así,
-además de todos los demás respaldos que ya tenían.
-
-## Corrección: marcar asistencia ahora reintenta sola si la jornada cambió
-
-Antes, si la jornada había cambiado por debajo (alguien la reinició en
-otro dispositivo), marcar a alguien presente mostraba el aviso "esta
-jornada ya no existe" y el usuario tenía que darse cuenta y tocar el
-casillero de nuevo. Ahora la app **reintenta sola** con la jornada
-correcta en el momento — el toque nunca se pierde, y solo se ve un error
-si el reintento también falla.
-
-Si sigues viendo el aviso de forma repetida y consistente (no como algo
-ocasional), lo más probable es que **haya más de una persona probando la
-app al mismo tiempo** y alguien esté tocando "Reiniciar todo" o
-"Comenzar jornada nueva" mientras otra pantalla sigue activa — eso seguirá
-generando fricción sin importar cuánta resiliencia se agregue, porque es
-un reinicio real e intencional pasando en simultáneo. Para una prueba
-completa y limpia, lo más seguro es que una sola persona controle
-Configuraciones mientras el resto solo usa Jugadores/Draft/Partidos.
-
-## Auditoría: por qué "jornada" se sentía tan fràgil, y la corrección de fondo
-
-Dos huecos concretos causaban que un reinicio se sintiera inconsistente
-entre pantallas:
-
-1. **"Reiniciar todo" no actualizaba ni su propia pantalla**: Configuraciones
-   borraba la jornada, creaba una nueva... pero se quedaba mostrando datos
-   de la vieja hasta el siguiente sondeo. Por eso "Guardar tiempos" podía
-   fallar con "Jornada no encontrada" justo después de resetear, en la
-   misma pantalla. Corregido: ahora se actualiza al instante con la
-   respuesta del propio reinicio.
-2. **Ninguna pantalla escuchaba "nació una jornada"**: Dashboard, Draft y
-   Cobranza sabían escuchar cambios a una jornada que YA conocían, pero no
-   tenían forma de enterarse de que había nacido una nueva — solo lo
-   notaban en el siguiente sondeo (hasta 5s de demora). Jugadores y
-   Partidos ni siquiera tenían esa suscripción. Ahora las 5 pantallas
-   tienen un canal siempre activo que avisa **al instante** (por Realtime,
-   no por sondeo) en cuanto aparece una jornada nueva en cualquier
-   dispositivo — sea por "Reiniciar todo" o "Comenzar jornada nueva".
-
-Esto no cambia el concepto de jornada (que ya era correcto: attendance,
-draft y equipos SÍ deben poder tocarse mientras `estado = "pendiente"`,
-antes de iniciar) — el problema era puramente de qué tan rápido cada
-pantalla se enteraba de un reemplazo de jornada.
-
-## Nuevo: popup de cobranza al finalizar la jornada
-
-Seguido el flujo que describiste: cuando el admin toca "Finalizar
-jornada" en el Dashboard, aparece un popup ahí mismo pidiendo el costo
-total de la cancha — sin tener que navegar a Cobranza. Se reparte solo
-entre los equipos ya armados. Si prefieres hacerlo después, el botón
-"Lo hago después" cierra el popup sin perder nada — se puede cargar el
-costo más tarde desde Cobranza como siempre.
-
-## Rastro de auditoría: quién y cuándo reinició la jornada
-
-Ya no hay que adivinar. Cada vez que se crea una jornada (primer uso,
-"Comenzar jornada nueva", o "Reiniciar todo") queda guardado quién lo
-hizo. Esto aparece en dos lugares:
-- En el **Dashboard**, debajo del estado: "Jornada iniciada por: [nombre]
-  (reinicio total / jornada nueva / primer uso)".
-- **En el momento mismo** que a alguien se le corta una acción porque la
-  jornada cambió (por ejemplo al marcar asistencia), el aviso ahora dice
-  exactamente quién la reinició, y la app ya reintentó tu cambio sola con
-  la jornada correcta.
-
-## "Reiniciar todo" ahora pide escribir una palabra para confirmar
-
-Antes bastaba un toque + un botón de "Sí, reiniciar". Como es un botón de
-emergencia que borra la jornada de TODOS los que estén usando la app en
-ese momento, ahora hay que escribir **REINICIAR** para que el botón se
-habilite — así nadie lo dispara sin querer, y si dos personas están
-probando al mismo tiempo, hace falta una acción bien deliberada para
-que uno le borre el trabajo al otro.
-
-## Corrección: el mensaje de "la jornada la reinició alguien" podía ser falso
-
-Bug en el propio mensaje, no en la lógica de datos: cuando el primer
-intento de marcar asistencia fallaba, la app SIEMPRE mostraba "la jornada
-la reinició X", sin importar por qué había fallado el reintento. Si el
-reintento fallaba por otro motivo (una red lenta, lo que sea), igual
-decía lo mismo — un mensaje engañoso. Ahora, si el reintento falla,
-muestra el motivo real que devuelve el servidor. Además, agrega un
-segundo reintento con una breve espera antes de rendirse, para absorber
-cualquier tropiezo pasajero sin que el usuario lo note.
-
-Diagnóstico confirmado: la base de datos está sana (una sola jornada,
-sin duplicados) — así que si el error vuelve a aparecer, el mensaje
-nuevo va a decir la razón real en vez de siempre culpar a un reinicio.
-
-## Importante: cierra la pestaña del navegador entre actualizaciones
-
-Una app web no se actualiza sola en una pestaña ya abierta — agarra el
-código nuevo recién cuando la abres de cero. Si vienes probando en la
-misma pestaña desde hace varias actualizaciones, es probable que ninguno
-de los arreglos recientes esté corriendo todavía ahí. Para cada prueba
-nueva: cierra la pestaña por completo (no solo navegues para atrás) y
-vuelve a abrir la URL.
+_Generado con Cosmos Code_
