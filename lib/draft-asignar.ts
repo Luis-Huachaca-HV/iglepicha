@@ -1,11 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  integrarSobrantes,
   repartirConCupoDinamico,
   type JugadorReparto,
   type PosicionReparto,
 } from "@/lib/draft-capacidad";
-import { camotesPresentes, colocarCamotes } from "@/lib/draft-reglas";
+import {
+  clasificarPresentesJornada,
+  colocarCamotes,
+  colocarSuplentes,
+  promediosGenerales,
+} from "@/lib/draft-reglas";
 
 type Admin = SupabaseClient;
 
@@ -34,7 +38,6 @@ function cupoBaseDe(equipo: FilaEquipo): number | null {
   return equipo.cupo_max;
 }
 
-/** La columna cupo_base llega con la migración 011. Si todavía no está, el reparto igual funciona. */
 async function recordarCupoBase(admin: Admin, idEquipo: string, cupoBase: number) {
   await admin.from("equipos_jornada").update({ cupo_base: cupoBase }).eq("id_equipo", idEquipo);
 }
@@ -58,20 +61,21 @@ async function leerAsistencias(admin: Admin, idJornada: string): Promise<{ filas
   return { filas: (data ?? []) as FilaAsistencia[] };
 }
 
-/**
- * Si un equipo quedó con más jugadores titulares (no Camotes) que su cupo guardado, sube cupo_max.
- */
 export async function ampliarCupoSiHaceFalta(admin: Admin, idEquipo: string) {
   const { data: equipo } = await admin.from("equipos_jornada").select("*").eq("id_equipo", idEquipo).maybeSingle();
   if (!equipo) return;
   const fila = equipo as FilaEquipo & { id_jornada?: string };
 
-  const [{ data: asis }, camotes] = await Promise.all([
+  const [{ data: asis }, clasificacion] = await Promise.all([
     admin.from("asistencia_draft").select("id_usuario").eq("id_equipo", idEquipo).eq("presente", true),
-    fila.id_jornada ? camotesPresentes(admin, fila.id_jornada) : Promise.resolve(new Set<string>()),
+    fila.id_jornada
+      ? clasificarPresentesJornada(admin, fila.id_jornada)
+      : Promise.resolve({ camotes: new Set<string>(), suplentes: new Set<string>() }),
   ]);
 
-  const ocupados = (asis ?? []).filter((a) => !camotes.has(a.id_usuario as string)).length;
+  const ocupados = (asis ?? []).filter(
+    (a) => !clasificacion.camotes.has(a.id_usuario as string) && !clasificacion.suplentes.has(a.id_usuario as string)
+  ).length;
   const cupoActual = fila.cupo_max ?? 0;
   if (fila.cupo_max == null || ocupados <= cupoActual) return;
 
@@ -83,7 +87,9 @@ export async function ampliarCupoSiHaceFalta(admin: Admin, idEquipo: string) {
 }
 
 /**
- * Asigna a los presentes titulares (no Camotes) que siguen sin equipo.
+ * Cuando hay más de 30 titulares (por ejemplo, 31 por un Invitado) y los cupos base se llenan,
+ * el equipo que pasa a jugar con 7 se elige equilibrando que tenga al menos un jugador
+ * de menor edad o menor nivel (o el menor promedio general).
  */
 export async function colocarSobrantesEnJornada(
   admin: Admin,
@@ -94,19 +100,35 @@ export async function colocarSobrantesEnJornada(
   if (errorEquipos) return { asignados: [], hayCupo: false, error: errorEquipos };
   if (equipos.length === 0) return { asignados: [], hayCupo: false };
 
-  const [{ filas, error: errorAsistencias }, camotes] = await Promise.all([
+  const [{ filas, error: errorAsistencias }, clasificacion, ratings, { data: usuariosData }] = await Promise.all([
     leerAsistencias(admin, idJornada),
-    camotesPresentes(admin, idJornada),
+    clasificarPresentesJornada(admin, idJornada),
+    promediosGenerales(admin),
+    admin.from("usuarios").select("id_usuario, edad"),
   ]);
   if (errorAsistencias) return { asignados: [], hayCupo: false, error: errorAsistencias };
 
+  const edadPorId = new Map<string, number | null>(
+    (usuariosData ?? []).map((u) => [u.id_usuario as string, (u.edad as number | null) ?? null])
+  );
+  const conocidos = Object.values(ratings).filter((v) => v > 0);
+  const mediaGlobal = conocidos.length > 0 ? conocidos.reduce((a, b) => a + b, 0) / conocidos.length : 5.5;
+
+  const rosterPorEquipo = new Map<string, string[]>();
   const ocupados = new Map<string, number>();
-  for (const equipo of equipos) ocupados.set(equipo.id_equipo, 0);
+  for (const equipo of equipos) {
+    ocupados.set(equipo.id_equipo, 0);
+    rosterPorEquipo.set(equipo.id_equipo, []);
+  }
+
   const sobrantes: string[] = [];
   for (const fila of filas) {
-    if (!fila.presente || camotes.has(fila.id_usuario)) continue;
+    if (!fila.presente || clasificacion.camotes.has(fila.id_usuario) || clasificacion.suplentes.has(fila.id_usuario)) {
+      continue;
+    }
     if (fila.id_equipo && ocupados.has(fila.id_equipo)) {
       ocupados.set(fila.id_equipo, (ocupados.get(fila.id_equipo) ?? 0) + 1);
+      rosterPorEquipo.get(fila.id_equipo)!.push(fila.id_usuario);
     } else if (!fila.id_equipo) {
       sobrantes.push(fila.id_usuario);
     }
@@ -121,44 +143,49 @@ export async function colocarSobrantesEnJornada(
   if (sobrantes.length === 0) return { asignados: [], hayCupo };
   if (opciones?.soloSiNoHayCupo && hayCupo) return { asignados: [], hayCupo: true };
 
-  const { estado, asignaciones } = integrarSobrantes(
-    equipos.map((equipo) => ({
-      id: equipo.id_equipo,
-      cupoBase: equipo.cupo_max,
-      ocupados: ocupados.get(equipo.id_equipo) ?? 0,
-    })),
-    sobrantes
-  );
-
-  if (asignaciones.length < sobrantes.length) {
-    return { asignados: [], hayCupo: false, error: "No se pudo asignar a todos los jugadores sin equipo" };
+  function puntajeMenorEdadONivel(idEquipo: string): number {
+    const miembros = rosterPorEquipo.get(idEquipo) ?? [];
+    if (miembros.length === 0) return 0;
+    const minRating = Math.min(...miembros.map((id) => (ratings[id] && ratings[id] > 0 ? ratings[id] : mediaGlobal)));
+    const edades = miembros.map((id) => edadPorId.get(id)).filter((e): e is number => typeof e === "number");
+    const minEdad = edades.length > 0 ? Math.min(...edades) : 25;
+    const prom = miembros.reduce((acc, id) => acc + (ratings[id] && ratings[id] > 0 ? ratings[id] : mediaGlobal), 0) / miembros.length;
+    return minRating * 2 + prom + minEdad * 0.1;
   }
 
-  for (const asignacion of asignaciones) {
+  const asignaciones: { idJugador: string; idEquipo: string }[] = [];
+
+  for (const idSobrante of sobrantes) {
+    const minOcupados = Math.min(...equipos.map((e) => ocupados.get(e.id_equipo) ?? 0));
+    const candidatos = equipos.filter((e) => (ocupados.get(e.id_equipo) ?? 0) === minOcupados);
+
+    // El equipo de 7 será aquel que tenga menor nivel/edad en su plantel para equilibrar el jugador extra
+    candidatos.sort((a, b) => puntajeMenorEdadONivel(a.id_equipo) - puntajeMenorEdadONivel(b.id_equipo));
+    const elegido = candidatos[0]!;
+
     const { error } = await admin
       .from("asistencia_draft")
-      .update({ id_equipo: asignacion.idEquipo })
+      .update({ id_equipo: elegido.id_equipo })
       .eq("id_jornada", idJornada)
-      .eq("id_usuario", asignacion.idJugador);
+      .eq("id_usuario", idSobrante);
     if (error) return { asignados: [], hayCupo: false, error: error.message };
-  }
 
-  for (const equipo of estado) {
-    const original = equipos.find((item) => item.id_equipo === equipo.id);
-    if (!original || equipo.cupo == null) continue;
-    if (original.cupo_max != null && equipo.cupo <= original.cupo_max) continue;
-    const { error } = await admin.from("equipos_jornada").update({ cupo_max: equipo.cupo }).eq("id_equipo", equipo.id);
-    if (error) return { asignados: [], hayCupo: false, error: error.message };
-    if (typeof original.cupo_base !== "number" && original.cupo_max != null) {
-      await recordarCupoBase(admin, equipo.id, original.cupo_max);
+    const nuevoTotal = (ocupados.get(elegido.id_equipo) ?? 0) + 1;
+    ocupados.set(elegido.id_equipo, nuevoTotal);
+    rosterPorEquipo.get(elegido.id_equipo)!.push(idSobrante);
+    asignaciones.push({ idJugador: idSobrante, idEquipo: elegido.id_equipo });
+
+    if (elegido.cupo_max != null && nuevoTotal > elegido.cupo_max) {
+      await admin.from("equipos_jornada").update({ cupo_max: nuevoTotal }).eq("id_equipo", elegido.id_equipo);
+      if (typeof elegido.cupo_base !== "number") {
+        await recordarCupoBase(admin, elegido.id_equipo, elegido.cupo_max);
+      }
+      elegido.cupo_max = nuevoTotal;
     }
   }
 
   return {
-    asignados: asignaciones.map((asignacion) => ({
-      id_usuario: asignacion.idJugador,
-      id_equipo: asignacion.idEquipo,
-    })),
+    asignados: asignaciones.map((a) => ({ id_usuario: a.idJugador, id_equipo: a.idEquipo })),
     hayCupo: false,
   };
 }
@@ -169,14 +196,16 @@ async function siguienteEquipoConCupo(
   equipos: FilaEquipo[],
   idEquipoActual: string
 ): Promise<string | null> {
-  const [{ filas }, camotes] = await Promise.all([
+  const [{ filas }, clasificacion] = await Promise.all([
     leerAsistencias(admin, idJornada),
-    camotesPresentes(admin, idJornada),
+    clasificarPresentesJornada(admin, idJornada),
   ]);
   const ocupados = new Map<string, number>();
   let enBolsa = 0;
   for (const fila of filas) {
-    if (!fila.presente || camotes.has(fila.id_usuario)) continue;
+    if (!fila.presente || clasificacion.camotes.has(fila.id_usuario) || clasificacion.suplentes.has(fila.id_usuario)) {
+      continue;
+    }
     if (fila.id_equipo) ocupados.set(fila.id_equipo, (ocupados.get(fila.id_equipo) ?? 0) + 1);
     else enBolsa += 1;
   }
@@ -193,11 +222,6 @@ async function siguienteEquipoConCupo(
   return null;
 }
 
-/**
- * Después de un pick: si queda gente titular en la bolsa y algún equipo tiene
- * cupo, sigue el turno. Si los cupos base ya se llenaron, asigna a los
- * sobrantes y cierra el draft.
- */
 export async function cerrarOContinuarDraft(
   admin: Admin,
   idJornada: string,
@@ -210,11 +234,17 @@ export async function cerrarOContinuarDraft(
   const siguiente = await siguienteEquipoConCupo(admin, idJornada, equipos, idEquipoActual);
   if (siguiente) return { siguienteEquipo: siguiente };
 
-  const [{ filas }, camotes] = await Promise.all([
+  const [{ filas }, clasificacion] = await Promise.all([
     leerAsistencias(admin, idJornada),
-    camotesPresentes(admin, idJornada),
+    clasificarPresentesJornada(admin, idJornada),
   ]);
-  const haySobrantes = filas.some((fila) => fila.presente && !fila.id_equipo && !camotes.has(fila.id_usuario));
+  const haySobrantes = filas.some(
+    (fila) =>
+      fila.presente &&
+      !fila.id_equipo &&
+      !clasificacion.camotes.has(fila.id_usuario) &&
+      !clasificacion.suplentes.has(fila.id_usuario)
+  );
   if (!haySobrantes) return { siguienteEquipo: null };
 
   const colocados = await colocarSobrantesEnJornada(admin, idJornada, { soloSiNoHayCupo: true });
@@ -224,32 +254,6 @@ export async function cerrarOContinuarDraft(
     return { siguienteEquipo: deNuevo };
   }
   return { siguienteEquipo: null };
-}
-
-function promedioValoracion(stats: Record<string, number> | undefined): number | null {
-  if (!stats) return null;
-  const valores = Object.values(stats);
-  if (valores.length === 0) return null;
-  return valores.reduce((a, b) => a + b, 0) / valores.length;
-}
-
-async function valoracionesGenerales(admin: Admin): Promise<Record<string, number>> {
-  const { data } = await admin.from("valoraciones").select("id_evaluado, stats");
-  const acumulado: Record<string, { suma: Record<string, number>; n: number }> = {};
-  for (const fila of data ?? []) {
-    const entry = (acumulado[fila.id_evaluado] ??= { suma: {}, n: 0 });
-    entry.n += 1;
-    for (const [clave, valor] of Object.entries(fila.stats as Record<string, number>)) {
-      entry.suma[clave] = (entry.suma[clave] ?? 0) + valor;
-    }
-  }
-  const generales: Record<string, number> = {};
-  for (const [id, { suma, n }] of Object.entries(acumulado)) {
-    const promedios = Object.fromEntries(Object.entries(suma).map(([clave, valor]) => [clave, valor / n]));
-    const general = promedioValoracion(promedios);
-    if (general != null) generales[id] = general;
-  }
-  return generales;
 }
 
 export async function fijarCupos(
@@ -273,10 +277,6 @@ export async function fijarCupos(
   return {};
 }
 
-/**
- * Sorteo completo: equilibra por valoración a los titulares, excluye Camotes
- * del cupo y al finalizar reparte los Camotes según la regla especial.
- */
 export async function recalcularEquiposJornada(
   admin: Admin,
   idJornada: string,
@@ -313,38 +313,50 @@ export async function recalcularEquiposJornada(
     .eq("presente", false);
   if (errorAusentes) return { error: errorAusentes.message };
 
-  const [{ filas, error: errorAsistencias }, camotes] = await Promise.all([
+  const [{ filas, error: errorAsistencias }, clasificacion] = await Promise.all([
     leerAsistencias(admin, idJornada),
-    camotesPresentes(admin, idJornada),
+    clasificarPresentesJornada(admin, idJornada),
   ]);
   if (errorAsistencias) return { error: errorAsistencias };
 
-  for (const idCamote of camotes) {
+  for (const idExtra of [...clasificacion.camotes, ...clasificacion.suplentes]) {
     await admin
       .from("asistencia_draft")
       .update({ id_equipo: null })
       .eq("id_jornada", idJornada)
-      .eq("id_usuario", idCamote);
+      .eq("id_usuario", idExtra);
   }
 
   const presentes = new Set(
-    filas.filter((fila) => fila.presente && !camotes.has(fila.id_usuario)).map((fila) => fila.id_usuario)
+    filas
+      .filter(
+        (fila) =>
+          fila.presente &&
+          !clasificacion.camotes.has(fila.id_usuario) &&
+          !clasificacion.suplentes.has(fila.id_usuario)
+      )
+      .map((fila) => fila.id_usuario)
   );
   for (const equipo of equipos) {
-    if (equipo.id_capitan && !camotes.has(equipo.id_capitan)) presentes.add(equipo.id_capitan);
+    if (equipo.id_capitan && !clasificacion.camotes.has(equipo.id_capitan)) {
+      presentes.add(equipo.id_capitan);
+    }
   }
   if (presentes.size === 0) return { error: "No hay jugadores titulares presentes para sortear" };
 
   const { data: usuarios, error: errorUsuarios } = await admin
     .from("usuarios")
-    .select("id_usuario, posicion")
+    .select("id_usuario, posicion, edad")
     .in("id_usuario", [...presentes]);
   if (errorUsuarios) return { error: errorUsuarios.message };
 
   const posicionPorId = new Map(
     (usuarios ?? []).map((usuario) => [usuario.id_usuario as string, (usuario.posicion ?? null) as PosicionReparto])
   );
-  const ratings = await valoracionesGenerales(admin);
+  const edadPorId = new Map(
+    (usuarios ?? []).map((usuario) => [usuario.id_usuario as string, (usuario.edad as number | null) ?? null])
+  );
+  const ratings = await promediosGenerales(admin);
   const conocidos = Object.values(ratings).filter((valor) => valor > 0);
   const media = conocidos.length > 0 ? conocidos.reduce((a, b) => a + b, 0) / conocidos.length : 5;
 
@@ -353,6 +365,8 @@ export async function recalcularEquiposJornada(
     valoracion: ratings[id] && ratings[id] > 0 ? ratings[id] : media,
     posicion: posicionPorId.get(id) ?? null,
   }));
+
+  const capitanesSet = new Set(equipos.map((e) => e.id_capitan).filter((id): id is string => Boolean(id)));
 
   const plan = repartirConCupoDinamico(
     jugadores,
@@ -363,9 +377,31 @@ export async function recalcularEquiposJornada(
     }))
   );
 
-  const asignados = new Set(plan.flatMap((equipo) => equipo.jugadores));
-  if ([...presentes].some((id) => !asignados.has(id))) {
-    return { error: "El sorteo dejó jugadores sin equipo" };
+  // Si un equipo quedó con 7 jugadores (por un invitado en el puesto 31+),
+  // aseguramos que tenga al menos un jugador de menor edad o menor valoración para equilibrar.
+  const equipoConSiete = plan.find((eq) => eq.jugadores.length > eq.cupoBase);
+  if (equipoConSiete) {
+    const puntajesPorJugador = (id: string) => {
+      const r = ratings[id] && ratings[id] > 0 ? ratings[id] : media;
+      const e = edadPorId.get(id);
+      return e != null && e < 18 ? r - 1.5 : r;
+    };
+    const todosNoCapitanes = [...presentes].filter((id) => !capitanesSet.has(id));
+    todosNoCapitanes.sort((a, b) => puntajesPorJugador(a) - puntajesPorJugador(b));
+    const jugadorMenorNivelOEdad = todosNoCapitanes[0];
+
+    if (jugadorMenorNivelOEdad && !equipoConSiete.jugadores.includes(jugadorMenorNivelOEdad)) {
+      const equipoOrigen = plan.find((eq) => eq.jugadores.includes(jugadorMenorNivelOEdad));
+      const candidatoCambio = equipoConSiete.jugadores.find((id) => !capitanesSet.has(id));
+      if (equipoOrigen && candidatoCambio) {
+        equipoConSiete.jugadores = equipoConSiete.jugadores.map((id) =>
+          id === candidatoCambio ? jugadorMenorNivelOEdad : id
+        );
+        equipoOrigen.jugadores = equipoOrigen.jugadores.map((id) =>
+          id === jugadorMenorNivelOEdad ? candidatoCambio : id
+        );
+      }
+    }
   }
 
   for (const equipo of plan) {
@@ -384,6 +420,7 @@ export async function recalcularEquiposJornada(
     await recordarCupoBase(admin, equipo.id, equipo.cupoBase);
   }
 
+  await colocarSuplentes(admin, idJornada);
   await colocarCamotes(admin, idJornada);
 
   const { error: errorCierre } = await admin

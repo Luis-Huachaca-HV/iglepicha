@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 type Admin = SupabaseClient;
 
+export const LIMITE_TITULARES_PUNTUALES = 30;
+
 export interface ReglasDraft {
   umbralTop: number;
   maxTopsPorEquipo: number;
@@ -9,6 +11,9 @@ export interface ReglasDraft {
   topsPresentes: Set<string>;
   topsPorEquipo: Map<string, Set<string>>;
   camotesPresentes: Set<string>;
+  suplentesPresentes: Set<string>;
+  invitadosPresentes: Set<string>;
+  ordenPorUsuario: Map<string, number>;
 }
 
 export function esCamoteValido(u: { edad?: number | null; es_camote?: boolean | null } | null | undefined): boolean {
@@ -42,59 +47,124 @@ export async function promediosGenerales(admin: Admin): Promise<Record<string, n
   return generales;
 }
 
-export async function camotesPresentes(admin: Admin, idJornada: string): Promise<Set<string>> {
-  const { data: asis } = await admin
+type AsistenciaRaw = {
+  id_usuario: string;
+  id_equipo: string | null;
+  presente: boolean;
+  es_invitado?: boolean;
+  marcado_en?: string | null;
+  id_asistencia?: string;
+};
+
+async function leerAsistenciasExtendidas(admin: Admin, idJornada: string): Promise<AsistenciaRaw[]> {
+  const conNuevas = await admin
     .from("asistencia_draft")
-    .select("id_usuario, presente")
-    .eq("id_jornada", idJornada)
-    .eq("presente", true);
+    .select("id_asistencia, id_usuario, id_equipo, presente, es_invitado, marcado_en")
+    .eq("id_jornada", idJornada);
+  if (!conNuevas.error && conNuevas.data) {
+    return conNuevas.data as AsistenciaRaw[];
+  }
+  const basicas = await admin
+    .from("asistencia_draft")
+    .select("id_asistencia, id_usuario, id_equipo, presente")
+    .eq("id_jornada", idJornada);
+  return (basicas.data ?? []) as AsistenciaRaw[];
+}
 
-  const ids = (asis ?? []).map((a) => a.id_usuario as string);
-  if (ids.length === 0) return new Set();
+export async function clasificarPresentesJornada(
+  admin: Admin,
+  idJornada: string
+): Promise<{
+  camotes: Set<string>;
+  suplentes: Set<string>;
+  invitados: Set<string>;
+  titulares: Set<string>;
+  ordenPorUsuario: Map<string, number>;
+}> {
+  const [asis, { data: equipos }] = await Promise.all([
+    leerAsistenciasExtendidas(admin, idJornada),
+    admin.from("equipos_jornada").select("id_capitan").eq("id_jornada", idJornada),
+  ]);
 
-  const { data: usus, error } = await admin
-    .from("usuarios")
-    .select("id_usuario, edad, es_camote")
-    .in("id_usuario", ids);
+  const presentesAsis = asis.filter((a) => a.presente);
+  const ids = presentesAsis.map((a) => a.id_usuario);
+  if (ids.length === 0) {
+    return {
+      camotes: new Set(),
+      suplentes: new Set(),
+      invitados: new Set(),
+      titulares: new Set(),
+      ordenPorUsuario: new Map(),
+    };
+  }
 
-  if (error || !usus) return new Set();
-
-  const resultado = new Set<string>();
-  for (const u of usus) {
+  const { data: usus } = await admin.from("usuarios").select("id_usuario, edad, es_camote").in("id_usuario", ids);
+  const camotes = new Set<string>();
+  for (const u of usus ?? []) {
     if (esCamoteValido(u as { edad?: number | null; es_camote?: boolean | null })) {
-      resultado.add(u.id_usuario as string);
+      camotes.add(u.id_usuario as string);
     }
   }
-  return resultado;
+
+  const capitanesIds = new Set<string>(
+    (equipos ?? []).map((e) => e.id_capitan as string | null).filter((id): id is string => Boolean(id))
+  );
+
+  const noCamotes = presentesAsis.filter((a) => !camotes.has(a.id_usuario));
+  noCamotes.sort((a, b) => {
+    const tA = a.marcado_en ? Date.parse(a.marcado_en) : Number.MAX_SAFE_INTEGER;
+    const tB = b.marcado_en ? Date.parse(b.marcado_en) : Number.MAX_SAFE_INTEGER;
+    if (tA !== tB) return tA - tB;
+    return String(a.id_asistencia ?? a.id_usuario).localeCompare(String(b.id_asistencia ?? b.id_usuario));
+  });
+
+  const suplentes = new Set<string>();
+  const invitados = new Set<string>();
+  const titulares = new Set<string>();
+  const ordenPorUsuario = new Map<string, number>();
+
+  noCamotes.forEach((fila, index) => {
+    const orden = index + 1;
+    ordenPorUsuario.set(fila.id_usuario, orden);
+    if (fila.es_invitado) invitados.add(fila.id_usuario);
+
+    if (orden <= LIMITE_TITULARES_PUNTUALES || fila.es_invitado || capitanesIds.has(fila.id_usuario)) {
+      titulares.add(fila.id_usuario);
+    } else {
+      suplentes.add(fila.id_usuario);
+    }
+  });
+
+  return { camotes, suplentes, invitados, titulares, ordenPorUsuario };
+}
+
+export async function camotesPresentes(admin: Admin, idJornada: string): Promise<Set<string>> {
+  const { camotes } = await clasificarPresentesJornada(admin, idJornada);
+  return camotes;
 }
 
 export async function leerReglasDraft(admin: Admin, idJornada: string): Promise<ReglasDraft> {
-  const [{ data: jornada }, { data: equipos }, { data: asistencias }, ratings, camotes] = await Promise.all([
+  const [{ data: jornada }, { data: equipos }, asis, ratings, clasificacion] = await Promise.all([
     admin.from("jornadas").select("*").eq("id_jornada", idJornada).maybeSingle(),
     admin.from("equipos_jornada").select("id_equipo, id_capitan").eq("id_jornada", idJornada),
-    admin.from("asistencia_draft").select("id_usuario, id_equipo, presente").eq("id_jornada", idJornada),
+    leerAsistenciasExtendidas(admin, idJornada),
     promediosGenerales(admin),
-    camotesPresentes(admin, idJornada),
+    clasificarPresentesJornada(admin, idJornada),
   ]);
 
   const jRaw = (jornada ?? {}) as { umbral_top?: number | null; max_tops_por_equipo?: number | null };
   const umbralTop = typeof jRaw.umbral_top === "number" ? Number(jRaw.umbral_top) : 7.5;
   const numEquipos = Math.max(1, (equipos ?? []).length);
 
-  const presentesIds = new Set<string>();
-  for (const a of asistencias ?? []) {
-    if (a.presente && !camotes.has(a.id_usuario as string)) {
-      presentesIds.add(a.id_usuario as string);
-    }
-  }
+  const presentesTitulares = new Set<string>(clasificacion.titulares);
   for (const eq of equipos ?? []) {
-    if (eq.id_capitan && !camotes.has(eq.id_capitan as string)) {
-      presentesIds.add(eq.id_capitan as string);
+    if (eq.id_capitan && !clasificacion.camotes.has(eq.id_capitan as string)) {
+      presentesTitulares.add(eq.id_capitan as string);
     }
   }
 
   const topsPresentes = new Set<string>();
-  for (const id of presentesIds) {
+  for (const id of presentesTitulares) {
     if ((ratings[id] ?? 0) >= umbralTop) {
       topsPresentes.add(id);
     }
@@ -114,11 +184,11 @@ export async function leerReglasDraft(admin: Admin, idJornada: string): Promise<
     }
     topsPorEquipo.set(eq.id_equipo as string, set);
   }
-  for (const a of asistencias ?? []) {
-    if (a.presente && a.id_equipo && topsPresentes.has(a.id_usuario as string)) {
-      const set = topsPorEquipo.get(a.id_equipo as string) ?? new Set<string>();
-      set.add(a.id_usuario as string);
-      topsPorEquipo.set(a.id_equipo as string, set);
+  for (const a of asis) {
+    if (a.presente && a.id_equipo && topsPresentes.has(a.id_usuario)) {
+      const set = topsPorEquipo.get(a.id_equipo) ?? new Set<string>();
+      set.add(a.id_usuario);
+      topsPorEquipo.set(a.id_equipo, set);
     }
   }
 
@@ -128,7 +198,10 @@ export async function leerReglasDraft(admin: Admin, idJornada: string): Promise<
     ratings,
     topsPresentes,
     topsPorEquipo,
-    camotesPresentes: camotes,
+    camotesPresentes: clasificacion.camotes,
+    suplentesPresentes: clasificacion.suplentes,
+    invitadosPresentes: clasificacion.invitados,
+    ordenPorUsuario: clasificacion.ordenPorUsuario,
   };
 }
 
@@ -140,6 +213,98 @@ export function motivoBloqueo(reglas: ReglasDraft, idEquipo: string, idJugador: 
     return `Este equipo ya alcanzó el tope de jugadores top (${reglas.maxTopsPorEquipo} de ≥ ${reglas.umbralTop.toFixed(1)}★ por equipo).`;
   }
   return null;
+}
+
+/**
+ * Reparte a los Suplentes (puesto 31+ que no formaron un 6to equipo) usando equilibrio inverso:
+ * - Si el suplente tiene media alta (>= media general), refuerza al equipo de MENOR promedio.
+ * - Si el suplente tiene media baja (< media general), compensa entrando al equipo de MAYOR promedio.
+ */
+export async function colocarSuplentes(
+  admin: Admin,
+  idJornada: string
+): Promise<{ asignados: { id_usuario: string; id_equipo: string }[] }> {
+  const { suplentes, camotes } = await clasificarPresentesJornada(admin, idJornada);
+  if (suplentes.size === 0) return { asignados: [] };
+
+  const [{ data: equipos }, asis, ratings] = await Promise.all([
+    admin.from("equipos_jornada").select("*").eq("id_jornada", idJornada).order("orden_turno", { ascending: true }),
+    leerAsistenciasExtendidas(admin, idJornada),
+    promediosGenerales(admin),
+  ]);
+
+  const listaEquipos = equipos ?? [];
+  if (listaEquipos.length === 0) return { asignados: [] };
+
+  const conocidos = Object.values(ratings).filter((v) => v > 0);
+  const mediaGlobal = conocidos.length > 0 ? conocidos.reduce((a, b) => a + b, 0) / conocidos.length : 5.5;
+
+  const rosterPorEquipo = new Map<string, string[]>();
+  const suplentesEnEquipo = new Map<string, number>();
+  for (const eq of listaEquipos) {
+    rosterPorEquipo.set(eq.id_equipo as string, []);
+    suplentesEnEquipo.set(eq.id_equipo as string, 0);
+  }
+
+  const suplentesSinEquipo: string[] = [];
+  for (const a of asis) {
+    if (!a.presente) continue;
+    if (suplentes.has(a.id_usuario)) {
+      if (a.id_equipo && suplentesEnEquipo.has(a.id_equipo)) {
+        suplentesEnEquipo.set(a.id_equipo, (suplentesEnEquipo.get(a.id_equipo) ?? 0) + 1);
+        rosterPorEquipo.get(a.id_equipo)!.push(a.id_usuario);
+      } else if (!a.id_equipo) {
+        suplentesSinEquipo.push(a.id_usuario);
+      }
+    } else if (!camotes.has(a.id_usuario) && a.id_equipo && rosterPorEquipo.has(a.id_equipo)) {
+      rosterPorEquipo.get(a.id_equipo)!.push(a.id_usuario);
+    }
+  }
+
+  if (suplentesSinEquipo.length === 0) return { asignados: [] };
+
+  function promedioEquipo(idEq: string): number {
+    const ids = rosterPorEquipo.get(idEq) ?? [];
+    if (ids.length === 0) return mediaGlobal;
+    const suma = ids.reduce((acc, id) => acc + (ratings[id] && ratings[id] > 0 ? ratings[id] : mediaGlobal), 0);
+    return suma / ids.length;
+  }
+
+  const asignados: { id_usuario: string; id_equipo: string }[] = [];
+
+  for (const idSuplente of suplentesSinEquipo) {
+    const ratingSuplente = ratings[idSuplente] && ratings[idSuplente] > 0 ? ratings[idSuplente] : mediaGlobal;
+    const minSuplentes = Math.min(...listaEquipos.map((eq) => suplentesEnEquipo.get(eq.id_equipo as string) ?? 0));
+    const candidatos = listaEquipos.filter(
+      (eq) => (suplentesEnEquipo.get(eq.id_equipo as string) ?? 0) === minSuplentes
+    );
+
+    candidatos.sort((a, b) => {
+      const avgA = promedioEquipo(a.id_equipo as string);
+      const avgB = promedioEquipo(b.id_equipo as string);
+      // Si el suplente tiene mayor media -> va al equipo de menor promedio (avgA - avgB)
+      // Si el suplente tiene menor media -> va al equipo de mayor promedio (avgB - avgA)
+      if (Math.abs(avgA - avgB) > 0.001) {
+        return ratingSuplente >= mediaGlobal ? avgA - avgB : avgB - avgA;
+      }
+      return ((a.orden_turno as number | null) ?? 0) - ((b.orden_turno as number | null) ?? 0);
+    });
+
+    const elegido = candidatos[0]!.id_equipo as string;
+    const { error } = await admin
+      .from("asistencia_draft")
+      .update({ id_equipo: elegido })
+      .eq("id_jornada", idJornada)
+      .eq("id_usuario", idSuplente);
+
+    if (!error) {
+      suplentesEnEquipo.set(elegido, (suplentesEnEquipo.get(elegido) ?? 0) + 1);
+      rosterPorEquipo.get(elegido)!.push(idSuplente);
+      asignados.push({ id_usuario: idSuplente, id_equipo: elegido });
+    }
+  }
+
+  return { asignados };
 }
 
 export async function colocarCamotes(

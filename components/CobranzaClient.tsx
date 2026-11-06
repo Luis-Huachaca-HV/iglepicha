@@ -9,10 +9,6 @@ function soles(valor: number) {
   return `S/ ${valor.toFixed(2)}`;
 }
 
-function esUsuarioCamote(u: { edad: number | null; es_camote?: boolean } | undefined): boolean {
-  return Boolean(u?.es_camote && typeof u.edad === "number" && u.edad < 12);
-}
-
 export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
   const [jornada, setJornada] = useState<Jornada | null>(null);
 
@@ -178,19 +174,14 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
 
   if (!jornada) return <p className="text-mist">Cargando…</p>;
 
-  const titularesPresentes = asistencias.filter(
-    (a) => a.presente && !esUsuarioCamote(usuariosMap[a.id_usuario])
-  ).length;
-  const cuotaBase = titularesPresentes > 0 ? (jornada.costo_total || 0) / titularesPresentes : 0;
+  const presentes = asistencias.filter((a) => a.presente).length;
+  const cuotaBase = presentes > 0 ? (jornada.costo_total || 0) / presentes : 0;
   const extraTicket = Number(precioTicket) || 0;
-  const cuotaDe = (a: AsistenciaDraft) => {
-    const camote = esUsuarioCamote(usuariosMap[a.id_usuario]);
-    return (camote ? 0 : cuotaBase) + (a.ticket_adicional ? extraTicket : 0);
-  };
+  const cuotaDe = (ticket: boolean | undefined) => cuotaBase + (ticket ? extraTicket : 0);
 
   const totalRecaudado = equiposVisibles.reduce((suma, e) => {
     const roster = rosterDe(e.id_equipo);
-    return suma + roster.filter((a) => a.pago_realizado).reduce((parcial, a) => parcial + cuotaDe(a), 0);
+    return suma + roster.filter((a) => a.pago_realizado).reduce((parcial, a) => parcial + cuotaDe(a.ticket_adicional), 0);
   }, 0);
 
   const todoConcluido = equipos.length > 0 && equipos.every((e) => e.pago_entregado_admin);
@@ -243,9 +234,7 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
               className="w-24 rounded border border-pitch-700 bg-pitch-950 px-2 py-2 text-center disabled:opacity-40"
             />
           </label>
-          <p className="mt-2 text-xs text-mist">
-            Cuota = costo de la cancha / titulares presentes (los Camotes no pagan cancha), más el ticket verde de quien lo marcó.
-          </p>
+          <p className="mt-2 text-xs text-mist">Cuota = costo de la cancha / asistentes (incluidos Camotes), más el ticket verde de quien lo marcó.</p>
           {error && <p className="mt-2 text-sm text-card-red">{error}</p>}
           <button
             onClick={guardarCosto}
@@ -260,9 +249,8 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
       <div className="flex flex-col gap-4">
         {equiposVisibles.map((e) => {
           const roster = rosterDe(e.id_equipo);
-          const cobrables = roster.filter((a) => !esUsuarioCamote(usuariosMap[a.id_usuario]) || a.ticket_adicional);
-          const pagados = cobrables.filter((a) => a.pago_realizado).length;
-          const todosPagaron = cobrables.length > 0 && pagados === cobrables.length;
+          const pagados = roster.filter((a) => a.pago_realizado).length;
+          const todosPagaron = roster.length > 0 && pagados === roster.length;
           return (
             <div
               key={e.id_equipo}
@@ -271,44 +259,31 @@ export function CobranzaClient({ sesion }: { sesion: SesionUsuario }) {
               <div className="mb-2 flex items-center justify-between">
                 <span className="font-display font-bold">Equipo de {usuariosMap[e.id_capitan ?? ""]?.nombre ?? "?"}</span>
                 <span className="text-xs text-mist">
-                  {soles(e.cuota_equipo || 0)} · {pagados}/{cobrables.length} pagaron
+                  {soles(e.cuota_equipo || 0)} · {pagados}/{roster.length} pagaron
                 </span>
               </div>
 
               <ul className="flex flex-col divide-y divide-pitch-800">
                 {roster.map((a) => {
-                  const camote = esUsuarioCamote(usuariosMap[a.id_usuario]);
-                  const monto = cuotaDe(a);
-                  const exento = camote && !a.ticket_adicional;
+                  const u = usuariosMap[a.id_usuario];
+                  const esCamote = Boolean(u?.es_camote && typeof u.edad === "number" && u.edad < 12);
                   return (
                     <li key={a.id_usuario} className="flex items-center justify-between py-2">
                       <span className="text-sm">
-                        {usuariosMap[a.id_usuario]?.nombre ?? "?"}
-                        {exento ? (
-                          <span className="ml-2 rounded-pill bg-floodlight/15 px-2 py-0.5 text-xs font-bold text-floodlight">
-                            Camote · no paga
-                          </span>
-                        ) : (
-                          <span className="ml-2 text-xs text-mist">{soles(monto)}</span>
-                        )}
-                        {camote && a.ticket_adicional && (
-                          <span className="ml-2 text-xs font-bold text-floodlight">Camote</span>
-                        )}
+                        {u?.nombre ?? "?"}
+                        <span className="ml-2 text-xs text-mist">{soles(cuotaDe(a.ticket_adicional))}</span>
+                        {esCamote && <span className="ml-2 text-xs font-bold text-floodlight">Camote</span>}
                         {a.ticket_adicional && <span className="ml-2 text-xs font-bold text-turf-400">Ticket</span>}
                       </span>
-                      {exento ? (
-                        <span className="rounded-pill border border-pitch-700 px-3 py-2 text-xs text-mist">Exento</span>
-                      ) : (
-                        <button
-                          disabled={bloqueado || !puedeMarcarPago || a.pago_realizado}
-                          onClick={() => setConfirmarPago({ id_usuario: a.id_usuario, nombre: usuariosMap[a.id_usuario]?.nombre ?? "?" })}
-                          className={`rounded-pill px-3 py-2.5 text-xs font-bold transition disabled:opacity-60 ${
-                            a.pago_realizado ? "bg-turf-500 text-pitch-950" : "border border-pitch-700 text-mist"
-                          }`}
-                        >
-                          {a.pago_realizado ? "✓ Pagó" : "Debe"}
-                        </button>
-                      )}
+                      <button
+                        disabled={bloqueado || !puedeMarcarPago || a.pago_realizado}
+                        onClick={() => setConfirmarPago({ id_usuario: a.id_usuario, nombre: u?.nombre ?? "?" })}
+                        className={`rounded-pill px-3 py-2.5 text-xs font-bold transition disabled:opacity-60 ${
+                          a.pago_realizado ? "bg-turf-500 text-pitch-950" : "border border-pitch-700 text-mist"
+                        }`}
+                      >
+                        {a.pago_realizado ? "✓ Pagó" : "Debe"}
+                      </button>
                     </li>
                   );
                 })}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cerrarOContinuarDraft } from "@/lib/draft-asignar";
-import { colocarCamotes, leerReglasDraft, motivoBloqueo } from "@/lib/draft-reglas";
+import { colocarCamotes, colocarSuplentes, leerReglasDraft, motivoBloqueo } from "@/lib/draft-reglas";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { obtenerSesionActual } from "@/lib/session";
 
@@ -61,6 +61,12 @@ export async function POST(req: NextRequest) {
       { status: 409 }
     );
   }
+  if (reglas.suplentesPresentes.has(id_usuario)) {
+    return NextResponse.json(
+      { error: "Los jugadores suplentes (llegada 31+) se reparten por equilibrio al cerrar el draft o pasan al 6to equipo." },
+      { status: 409 }
+    );
+  }
 
   const bloqueo = motivoBloqueo(reglas, id_equipo, id_usuario);
   if (bloqueo) {
@@ -87,6 +93,7 @@ export async function POST(req: NextRequest) {
 
   let camotesSinEquipo: { id_usuario: string; nombre: string }[] = [];
   if (!siguienteEquipo) {
+    await colocarSuplentes(admin, id_jornada);
     const resCamotes = await colocarCamotes(admin, id_jornada);
     camotesSinEquipo = resCamotes.sinEquipo;
   }

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { camotesPresentes } from "@/lib/draft-reglas";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { obtenerSesionActual } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
+// POST /api/cobranza/costo
+// Todos los presentes (incluidos Camotes, Suplentes e Invitados) entran en la división de la cancha.
 export async function POST(req: NextRequest) {
   const sesion = await obtenerSesionActual();
   if (!sesion || (sesion.rol_sistema !== "admin" && sesion.rol_sistema !== "super_admin")) {
@@ -31,11 +32,7 @@ export async function POST(req: NextRequest) {
 
   await admin.from("jornadas").update({ costo_total }).eq("id_jornada", id_jornada);
 
-  const [{ data: equipos }, camotes] = await Promise.all([
-    admin.from("equipos_jornada").select("*").eq("id_jornada", id_jornada),
-    camotesPresentes(admin, id_jornada),
-  ]);
-
+  const { data: equipos } = await admin.from("equipos_jornada").select("*").eq("id_jornada", id_jornada);
   const conTicket = await admin
     .from("asistencia_draft")
     .select("id_usuario, id_equipo, presente, ticket_adicional")
@@ -51,14 +48,13 @@ export async function POST(req: NextRequest) {
       ticket_adicional?: boolean;
     }[]) ?? [];
 
-  const titularesPresentes = filas.filter((fila) => fila.presente && !camotes.has(fila.id_usuario));
-  const cuotaPersona = titularesPresentes.length > 0 ? costo_total / titularesPresentes.length : 0;
+  const presentes = filas.filter((fila) => fila.presente);
+  const cuotaPersona = presentes.length > 0 ? costo_total / presentes.length : 0;
 
   for (const equipo of equipos ?? []) {
     const roster = filas.filter((fila) => fila.id_equipo === equipo.id_equipo && fila.presente);
-    const titularesEquipo = roster.filter((fila) => !camotes.has(fila.id_usuario)).length;
     const tickets = roster.filter((fila) => fila.ticket_adicional).length;
-    const cuotaEquipo = titularesEquipo * cuotaPersona + tickets * precioTicket;
+    const cuotaEquipo = roster.length * cuotaPersona + tickets * precioTicket;
     await admin.from("equipos_jornada").update({ cuota_equipo: cuotaEquipo }).eq("id_equipo", equipo.id_equipo);
   }
 

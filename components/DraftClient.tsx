@@ -10,6 +10,8 @@ import { supabase } from "@/lib/supabase";
 import { useUsuarios, type UsuarioLista } from "@/lib/useUsuarios";
 import type { AsistenciaDraft, EquipoJornada, Jornada, SesionUsuario } from "@/lib/types";
 
+const LIMITE_TITULARES = 30;
+
 function promedioGeneral(stats: Record<string, number> | undefined): number | null {
   if (!stats) return null;
   const valores = Object.values(stats);
@@ -144,11 +146,48 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
     [asistencias]
   );
 
+  const capitanesSet = useMemo(
+    () => new Set(equipos.map((e) => e.id_capitan).filter((id): id is string => Boolean(id))),
+    [equipos]
+  );
+
+  const { titularesSet, suplentesSet } = useMemo(() => {
+    const presentesNoCamotes = asistencias.filter((a) => {
+      if (!a.presente) return false;
+      return !esUsuarioCamote(usuariosMap[a.id_usuario]);
+    });
+    presentesNoCamotes.sort((a, b) => {
+      const tA = a.marcado_en ? Date.parse(a.marcado_en) : Number.MAX_SAFE_INTEGER;
+      const tB = b.marcado_en ? Date.parse(b.marcado_en) : Number.MAX_SAFE_INTEGER;
+      if (tA !== tB) return tA - tB;
+      return String(a.id_asistencia ?? a.id_usuario).localeCompare(String(b.id_asistencia ?? b.id_usuario));
+    });
+
+    const tit = new Set<string>();
+    const sup = new Set<string>();
+    presentesNoCamotes.forEach((a, idx) => {
+      const orden = idx + 1;
+      if (orden <= LIMITE_TITULARES || a.es_invitado || capitanesSet.has(a.id_usuario)) {
+        tit.add(a.id_usuario);
+      } else {
+        sup.add(a.id_usuario);
+      }
+    });
+    return { titularesSet: tit, suplentesSet: sup };
+  }, [asistencias, usuariosMap, capitanesSet]);
+
   const presentes = useMemo(() => usuarios.filter((u) => asistenciaPorUsuario[u.id_usuario]?.presente), [
     usuarios,
     asistenciaPorUsuario,
   ]);
-  const titularesPresentes = useMemo(() => presentes.filter((u) => !esUsuarioCamote(u)), [presentes]);
+  const titularesPresentes = useMemo(
+    () => presentes.filter((u) => titularesSet.has(u.id_usuario)),
+    [presentes, titularesSet]
+  );
+  const suplentesEnJornada = useMemo(
+    () => presentes.filter((u) => suplentesSet.has(u.id_usuario)),
+    [presentes, suplentesSet]
+  );
   const camotesEnJornada = useMemo(() => presentes.filter((u) => esUsuarioCamote(u)), [presentes]);
   const ausentes = useMemo(() => usuarios.filter((u) => !asistenciaPorUsuario[u.id_usuario]?.presente), [
     usuarios,
@@ -156,8 +195,8 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
   ]);
 
   const bolsa = useMemo(
-    () => presentes.filter((u) => !asistenciaPorUsuario[u.id_usuario]?.id_equipo && !esUsuarioCamote(u)),
-    [presentes, asistenciaPorUsuario]
+    () => titularesPresentes.filter((u) => !asistenciaPorUsuario[u.id_usuario]?.id_equipo),
+    [titularesPresentes, asistenciaPorUsuario]
   );
 
   const umbralTop = typeof jornada?.umbral_top === "number" ? Number(jornada.umbral_top) : 7.5;
@@ -362,7 +401,8 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
           <h1 className="font-display text-2xl font-bold">Draft</h1>
           <p className="text-sm text-mist">
             {titularesPresentes.length} titulares presentes
-            {camotesEnJornada.length > 0 ? ` + ${camotesEnJornada.length} Camote(s)` : ""}.
+            {suplentesEnJornada.length > 0 ? ` · ${suplentesEnJornada.length} suplente(s)` : ""}
+            {camotesEnJornada.length > 0 ? ` · ${camotesEnJornada.length} Camote(s)` : ""}.
           </p>
           {ausentes.length > 0 && (
             <p className="mt-1 text-xs text-mist">
@@ -443,8 +483,7 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
           <>
             {sobrantesPrevistos > 0 && (
               <p className="rounded border border-floodlight/40 bg-floodlight/10 px-3 py-2 text-sm text-floodlight">
-                Hay {sobrantesPrevistos} jugador{sobrantesPrevistos === 1 ? "" : "es"} más que cupos. No se quedan fuera:
-                entran a un equipo y ese cupo pasa a tener un jugador más.
+                Hay {sobrantesPrevistos} titular{sobrantesPrevistos === 1 ? "" : "es"} extra (por Invitado). Un equipo jugará con 7 y será equilibrado con al menos un jugador de menor edad o nivel.
               </p>
             )}
             <button
@@ -540,7 +579,7 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
 
       <DndContext sensors={sensores} onDragEnd={soltarJugador}>
       <div className={`flex flex-col gap-3 ${vistaCancha ? "hidden" : ""}`}>
-        {equipos.map((e) => {
+        {equipos.map((e, idxEq) => {
           const roster = rosterDe(e.id_equipo);
           const { avg, sinClasificar, total } = promedioEquipo(e.id_equipo);
           const topsCount = topsDeEquipo(e.id_equipo);
@@ -553,7 +592,14 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
               className={`rounded border bg-pitch-900 p-4 transition-colors ${enTurno ? "border-floodlight" : "border-pitch-800"}`}
             >
               <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="font-display font-bold">Equipo de {usuariosMap[e.id_capitan ?? ""]?.nombre ?? "?"}</span>
+                <span className="font-display font-bold">
+                  Equipo de {usuariosMap[e.id_capitan ?? ""]?.nombre ?? "?"}
+                  {idxEq === 5 && (
+                    <span className="ml-2 rounded-pill bg-floodlight/15 px-2 py-0.5 text-xs font-bold text-floodlight">
+                      6to · Suplentes
+                    </span>
+                  )}
+                </span>
                 <span key={`${total}-${avg ?? "sc"}`} className="animate-ratingIn text-right text-xs text-mist tabular">
                   <span className={e.cupo_base != null && total > e.cupo_base ? "font-bold text-floodlight" : undefined}>
                     {total}/{e.cupo_base ?? e.cupo_max ?? "—"}
@@ -571,18 +617,27 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
                 </span>
               </div>
               <ul className="flex flex-wrap gap-1.5">
-                {roster.map((u) => (
-                  <li key={u.id_usuario}>
-                    <FichaArrastrable
-                      id={u.id_usuario}
-                      nombre={esUsuarioCamote(u) ? `${u.nombre} (Camote)` : u.nombre}
-                      disabled={!puedeArrastrar}
-                      onClick={() => {
-                        if (puedeArrastrar) setTradeAbierto(u.id_usuario);
-                      }}
-                    />
-                  </li>
-                ))}
+                {roster.map((u) => {
+                  const etiqueta = esUsuarioCamote(u)
+                    ? `${u.nombre} (Camote)`
+                    : suplentesSet.has(u.id_usuario)
+                      ? `${u.nombre} (Sup)`
+                      : asistenciaPorUsuario[u.id_usuario]?.es_invitado
+                        ? `${u.nombre} (Inv)`
+                        : u.nombre;
+                  return (
+                    <li key={u.id_usuario}>
+                      <FichaArrastrable
+                        id={u.id_usuario}
+                        nombre={etiqueta}
+                        disabled={!puedeArrastrar}
+                        onClick={() => {
+                          if (puedeArrastrar) setTradeAbierto(u.id_usuario);
+                        }}
+                      />
+                    </li>
+                  );
+                })}
                 {roster.length === 0 && <li className="text-xs text-mist">Sin jugadores aún</li>}
               </ul>
             </ZonaSoltar>
@@ -592,16 +647,17 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
 
       {(jornada.draft_estado === "en_curso" || jornada.draft_estado === "finalizado" || bolsa.length > 0) && (
         <ZonaSoltar id="bolsa" className="rounded-xl">
-          <h2 className="mb-2 font-display text-lg font-bold">Bolsa / banquillo ({bolsa.length})</h2>
+          <h2 className="mb-2 font-display text-lg font-bold">Bolsa de titulares ({bolsa.length})</h2>
           {jornada.draft_estado === "en_curso" && (
             <p className="mb-2 text-xs text-mist">
-              Si los cupos se llenan, quien siga acá entra al azar a un equipo. Los Camotes entran solos al cerrar el draft.
+              Si hay un Invitado extra (31), el equipo que juegue con 7 recibe equilibrio automático. Suplentes y Camotes entran al cerrar el draft.
             </p>
           )}
           {error && <p className="mb-2 text-sm text-card-red">{error}</p>}
           <ul className="flex flex-col divide-y divide-pitch-800">
             {bolsa.map((u) => {
               const esTop = topsPresentesSet.has(u.id_usuario);
+              const esInvitado = Boolean(asistenciaPorUsuario[u.id_usuario]?.es_invitado);
               const bloqueadoPorTop = jornada.draft_estado === "en_curso" && esTop && equipoTurnoLlenoDeTops;
               return (
                 <li key={u.id_usuario}>
@@ -618,6 +674,11 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
                             ★ Top
                           </span>
                         )}
+                        {esInvitado && (
+                          <span className="ml-2 rounded-pill bg-floodlight/15 px-2 py-0.5 text-xs font-bold text-floodlight">
+                            Invitado
+                          </span>
+                        )}
                       </span>
                       <span className="block text-xs text-mist">
                         {u.edad ? `${u.edad} años` : "Edad no registrada"}
@@ -632,7 +693,7 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
                 </li>
               );
             })}
-            {bolsa.length === 0 && <p className="py-4 text-sm text-mist">La bolsa está vacía.</p>}
+            {bolsa.length === 0 && <p className="py-4 text-sm text-mist">La bolsa de titulares está vacía.</p>}
           </ul>
           {jornada.draft_estado === "en_curso" && !esMiTurno && (
             <p className="mt-2 text-xs text-mist">
@@ -689,7 +750,7 @@ export function DraftClient({ sesion }: { sesion: SesionUsuario }) {
           <div className="w-full max-w-sm rounded-2xl border border-pitch-700 bg-pitch-900 p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <p className="font-display text-xl font-bold">Recalcular equipos</p>
             <p className="mb-6 mt-2 text-sm text-mist">
-              Se vuelven a repartir todos los presentes. Si sobran jugadores respecto al cupo, un equipo queda con uno más. Nadie se queda fuera.
+              Se vuelven a repartir todos los presentes. Si hay un invitado extra (31), el equipo de 7 se equilibra con un jugador de menor edad o nivel.
             </p>
             <div className="flex gap-3">
               <button onClick={() => setConfirmarRecalculo(false)} className="flex-1 rounded-pill border border-pitch-700 py-3 text-sm">

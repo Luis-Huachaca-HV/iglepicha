@@ -80,6 +80,8 @@ export interface AsistenciaDraft {
   presente: boolean;
   pago_realizado: boolean;
   ticket_adicional?: boolean;
+  es_invitado?: boolean;
+  marcado_en?: string | null;
 }
 
 export const ROLES_CON_PIN: RolSistema[] = ["super_admin", "admin", "capitan"];

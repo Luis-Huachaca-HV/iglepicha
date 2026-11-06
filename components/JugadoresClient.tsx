@@ -11,6 +11,7 @@ import { useToast } from "@/lib/useToast";
 import type { AsistenciaDraft, EquipoJornada, Jornada, Posicion, SesionUsuario } from "@/lib/types";
 
 const POSICIONES: Posicion[] = ["POR", "DEF", "MC", "DEL"];
+const LIMITE_TITULARES = 30;
 
 const CHIPS_POSICION: { id: string; label: string; guarda: Posicion }[] = [
   { id: "POR", label: "Portero", guarda: "POR" },
@@ -63,6 +64,7 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevaEdad, setNuevaEdad] = useState("");
   const [nuevoCamote, setNuevoCamote] = useState(false);
+  const [nuevoInvitado, setNuevoInvitado] = useState(false);
   const [pasoNuevo, setPasoNuevo] = useState<1 | 2 | 3>(1);
   const [chipsNuevo, setChipsNuevo] = useState<string[]>([]);
   const [valoracionNueva, setValoracionNueva] = useState(6);
@@ -72,6 +74,13 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
   const [editandoValoracion, setEditandoValoracion] = useState(false);
   const [statsEdit, setStatsEdit] = useState<Record<string, number>>({});
   const [confirmarAsistencia, setConfirmarAsistencia] = useState<{ id_usuario: string; nombre: string; presente: boolean } | null>(null);
+
+  // Estados para 6to equipo de suplentes (al llegar a 35 o 36)
+  const [popup35Abierto, setPopup35Abierto] = useState(false);
+  const [aviso35Descartado, setAviso35Descartado] = useState(false);
+  const [modalSextoEquipo, setModalSextoEquipo] = useState(false);
+  const [capitanSextoElegido, setCapitanSextoElegido] = useState<string | null>(null);
+  const [creandoSexto, setCreandoSexto] = useState(false);
 
   const puedeMarcarAOtros = ["admin", "super_admin", "capitan"].includes(sesion.rol_sistema);
   const esAdmin = sesion.rol_sistema === "admin" || sesion.rol_sistema === "super_admin";
@@ -165,12 +174,98 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
     };
   }, [jornada?.id_jornada, cargarAsistenciasYEquipos]);
 
+  // Clasificación en vivo: primeros 30 no-Camotes = Titulares; 31+ = Suplentes (salvo Invitados o Capitanes)
+  const capitanesSet = useMemo(
+    () => new Set(equipos.map((e) => e.id_capitan).filter((id): id is string => Boolean(id))),
+    [equipos]
+  );
+
+  const clasificacion = useMemo(() => {
+    const camotes = new Set<string>();
+    const noCamotesPresentes: { id_usuario: string; marcado_en?: string | null; id_asistencia?: string; es_invitado?: boolean }[] = [];
+
+    for (const u of usuarios) {
+      const a = asistencias[u.id_usuario];
+      if (!a?.presente) continue;
+      if (u.es_camote && typeof u.edad === "number" && u.edad < 12) {
+        camotes.add(u.id_usuario);
+      } else {
+        noCamotesPresentes.push({
+          id_usuario: u.id_usuario,
+          marcado_en: a.marcado_en,
+          id_asistencia: a.id_asistencia,
+          es_invitado: a.es_invitado,
+        });
+      }
+    }
+
+    noCamotesPresentes.sort((a, b) => {
+      const tA = a.marcado_en ? Date.parse(a.marcado_en) : Number.MAX_SAFE_INTEGER;
+      const tB = b.marcado_en ? Date.parse(b.marcado_en) : Number.MAX_SAFE_INTEGER;
+      if (tA !== tB) return tA - tB;
+      return String(a.id_asistencia ?? a.id_usuario).localeCompare(String(b.id_asistencia ?? b.id_usuario));
+    });
+
+    const ordenPorId = new Map<string, number>();
+    const titulares = new Set<string>();
+    const suplentes = new Set<string>();
+    const invitados = new Set<string>();
+
+    noCamotesPresentes.forEach((item, idx) => {
+      const orden = idx + 1;
+      ordenPorId.set(item.id_usuario, orden);
+      if (item.es_invitado) invitados.add(item.id_usuario);
+      if (orden <= LIMITE_TITULARES || item.es_invitado || capitanesSet.has(item.id_usuario)) {
+        titulares.add(item.id_usuario);
+      } else {
+        suplentes.add(item.id_usuario);
+      }
+    });
+
+    return {
+      camotes,
+      titulares,
+      suplentes,
+      invitados,
+      ordenPorId,
+      totalNoCamotes: noCamotesPresentes.length,
+    };
+  }, [usuarios, asistencias, capitanesSet]);
+
+  const suplentesSinEquipo = useMemo(
+    () =>
+      usuarios.filter(
+        (u) => clasificacion.suplentes.has(u.id_usuario) && !asistencias[u.id_usuario]?.id_equipo
+      ),
+    [usuarios, clasificacion.suplentes, asistencias]
+  );
+
+  // Disparo automático de pop-up al llegar a 35 (5 suplentes, pregunta opcional) o 36 (6 suplentes, directo)
+  useEffect(() => {
+    if (!esAdmin || jornadaBloqueada || equipos.length >= 6) return;
+    if (suplentesSinEquipo.length >= 6) {
+      setPopup35Abierto(false);
+      setModalSextoEquipo(true);
+    } else if (suplentesSinEquipo.length === 5 && !aviso35Descartado && !modalSextoEquipo) {
+      setPopup35Abierto(true);
+    } else if (suplentesSinEquipo.length < 5) {
+      setPopup35Abierto(false);
+      setAviso35Descartado(false);
+    }
+  }, [esAdmin, jornadaBloqueada, equipos.length, suplentesSinEquipo.length, aviso35Descartado, modalSextoEquipo]);
+
   async function marcar(idUsuario: string, presente: boolean) {
     if (!jornada) return;
     const anterior = asistencias[idUsuario];
     setAsistencias((prev) => ({
       ...prev,
-      [idUsuario]: { ...(prev[idUsuario] as AsistenciaDraft), id_usuario: idUsuario, id_jornada: jornada.id_jornada, presente } as AsistenciaDraft,
+      [idUsuario]: {
+        ...(prev[idUsuario] as AsistenciaDraft),
+        id_usuario: idUsuario,
+        id_jornada: jornada.id_jornada,
+        presente,
+        marcado_en: presente ? new Date().toISOString() : null,
+      } as AsistenciaDraft,
     }));
 
     const intentar = (idJornada: string) =>
@@ -194,9 +289,51 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
     if (!res.ok) {
       setAsistencias((prev) => ({ ...prev, [idUsuario]: anterior as AsistenciaDraft }));
       mostrarToast(data?.error ?? "No se pudo actualizar la asistencia");
-    } else if (data?.advertencia) {
-      mostrarToast(data.advertencia);
+    } else {
+      cargarAsistenciasYEquipos(jornada.id_jornada);
+      if (data?.advertencia) mostrarToast(data.advertencia);
     }
+  }
+
+  async function toggleInvitado(idUsuario: string, nuevoEstado: boolean) {
+    if (!jornada) return;
+    const res = await fetch("/api/asistencia/invitado", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_jornada: jornada.id_jornada, id_usuario: idUsuario, es_invitado: nuevoEstado }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      mostrarToast(data?.error ?? "No se pudo actualizar condición de invitado");
+    } else {
+      cargarAsistenciasYEquipos(jornada.id_jornada);
+      mostrarToast(nuevoEstado ? "✓ Marcado como Invitado por esta jornada" : "✓ Quitado privilegio de invitado");
+    }
+  }
+
+  async function crearSextoEquipo() {
+    if (!jornada || !capitanSextoElegido || suplentesSinEquipo.length < 5) return;
+    setCreandoSexto(true);
+    const res = await fetch("/api/equipos/sexto-equipo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id_jornada: jornada.id_jornada,
+        id_capitan: capitanSextoElegido,
+        ids_suplentes: suplentesSinEquipo.map((u) => u.id_usuario),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setCreandoSexto(false);
+    if (!res.ok) {
+      mostrarToast(data?.error ?? "No se pudo crear el 6to equipo");
+      return;
+    }
+    setModalSextoEquipo(false);
+    setCapitanSextoElegido(null);
+    cargarAsistenciasYEquipos(jornada.id_jornada);
+    recargarUsuarios();
+    mostrarToast("✓ ¡6to equipo de suplentes creado!");
   }
 
   async function asignarEquipo(idUsuario: string, idEquipo: string | null) {
@@ -313,6 +450,14 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
         body: JSON.stringify({ id_usuario: idNuevo, es_camote: true }),
       });
     }
+    if (idNuevo && nuevoInvitado && jornada) {
+      await fetch("/api/asistencia/invitado", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_jornada: jornada.id_jornada, id_usuario: idNuevo, es_invitado: true }),
+      });
+      cargarAsistenciasYEquipos(jornada.id_jornada);
+    }
     if (idNuevo && idNuevo !== sesion.id_usuario) {
       const stats = Object.fromEntries(ETIQUETAS.map((e) => [e.clave, valoracionNueva]));
       await fetch("/api/valoraciones", {
@@ -326,6 +471,7 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
     setNuevoNombre("");
     setNuevaEdad("");
     setNuevoCamote(false);
+    setNuevoInvitado(false);
     setPasoNuevo(1);
     setChipsNuevo([]);
     setValoracionNueva(6);
@@ -367,6 +513,8 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
     setCapitanesElegidos([]);
   }
 
+  const lista30Cerrada = clasificacion.totalNoCamotes >= LIMITE_TITULARES;
+
   return (
     <div className="flex flex-col gap-6">
       <Toast mensaje={mensajeToast} />
@@ -374,9 +522,27 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
       <div>
         <h1 className="font-display text-2xl font-bold">Jugadores</h1>
         <p className="text-sm text-mist">
-          {presentes.length} de {usuarios.length} marcados presentes
+          {clasificacion.titulares.size}/{LIMITE_TITULARES} titulares
+          {clasificacion.suplentes.size > 0 ? ` · ${clasificacion.suplentes.size} suplente(s)` : ""}
+          {clasificacion.camotes.size > 0 ? ` · ${clasificacion.camotes.size} camote(s)` : ""}
         </p>
       </div>
+
+      {lista30Cerrada && (
+        <div className="rounded border border-floodlight/40 bg-floodlight/10 px-4 py-3 text-xs text-floodlight">
+          ⚡ <strong>30 titulares completos.</strong> Los siguientes asistentes ingresan con tono opaco como{" "}
+          <strong>Suplentes</strong> (salvo que tengan check de <strong>Invitado</strong>). Igual puedes quitar o marcar asistencias normalmente.
+        </div>
+      )}
+
+      {esAdmin && !jornadaBloqueada && suplentesSinEquipo.length >= 5 && equipos.length < 6 && (
+        <button
+          onClick={() => setModalSextoEquipo(true)}
+          className="w-full rounded-pill bg-floodlight py-3 font-display text-sm font-bold text-pitch-950"
+        >
+          ⚽ Armar 6to equipo con los {suplentesSinEquipo.length} suplentes
+        </button>
+      )}
 
       <div className="flex gap-2 overflow-x-auto">
         {[{ id: "todas", label: "Posición" }, ...CHIPS_POSICION.map((c) => ({ id: c.id, label: c.label }))].map((f) => (
@@ -431,18 +597,35 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
 
       <ul className="linea-cancha flex flex-col divide-y divide-pitch-800 pt-2">
         {usuariosFiltrados.map((u) => {
-          const presente = !!asistencias[u.id_usuario]?.presente;
-          const enEquipo = !!asistencias[u.id_usuario]?.id_equipo;
+          const asis = asistencias[u.id_usuario];
+          const presente = !!asis?.presente;
+          const enEquipo = !!asis?.id_equipo;
           const bloqueadoQuitar = presente && enEquipo;
           const esCamote = Boolean(u.es_camote && typeof u.edad === "number" && u.edad < 12);
+          const esInvitado = Boolean(asis?.es_invitado);
+          const esSuplente = clasificacion.suplentes.has(u.id_usuario);
+          const ordenLlegada = clasificacion.ordenPorId.get(u.id_usuario);
+          const mostrarOpaco = esSuplente || (!presente && lista30Cerrada && !esCamote && !esInvitado);
+
           return (
-            <li key={u.id_usuario} className="flex items-center justify-between gap-2 py-2">
-              <button className="flex min-w-0 flex-1 items-center gap-3 py-1.5 text-left" onClick={() => { setSeleccionado(u.id_usuario); setEditandoValoracion(false); }}>
+            <li
+              key={u.id_usuario}
+              className={`flex items-center justify-between gap-2 py-2 transition-opacity ${
+                mostrarOpaco ? "opacity-60" : "opacity-100"
+              }`}
+            >
+              <button
+                className="flex min-w-0 flex-1 items-center gap-3 py-1.5 text-left"
+                onClick={() => {
+                  setSeleccionado(u.id_usuario);
+                  setEditandoValoracion(false);
+                }}
+              >
                 <Avatar
                   nombre={u.nombre}
                   color={
-                    equipos.findIndex((e) => e.id_equipo === asistencias[u.id_usuario]?.id_equipo) >= 0
-                      ? colorDeEquipo(equipos.findIndex((e) => e.id_equipo === asistencias[u.id_usuario]?.id_equipo))
+                    equipos.findIndex((e) => e.id_equipo === asis?.id_equipo) >= 0
+                      ? colorDeEquipo(equipos.findIndex((e) => e.id_equipo === asis?.id_equipo))
                       : "#334155"
                   }
                   anillo={presente ? "asistencia" : undefined}
@@ -450,15 +633,28 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium">
                     {u.nombre}
+                    {ordenLlegada && !esCamote && (
+                      <span className="ml-1.5 text-xs text-mist">#{ordenLlegada}</span>
+                    )}
                     {esCamote && (
                       <span className="ml-2 rounded-pill bg-floodlight/15 px-2 py-0.5 text-xs font-bold text-floodlight">
                         Camote
                       </span>
                     )}
+                    {esInvitado && (
+                      <span className="ml-2 rounded-pill bg-turf-500/20 px-2 py-0.5 text-xs font-bold text-turf-400">
+                        Invitado
+                      </span>
+                    )}
+                    {esSuplente && (
+                      <span className="ml-2 rounded-pill bg-pitch-700 px-2 py-0.5 text-xs font-bold text-mist">
+                        Suplente
+                      </span>
+                    )}
                   </span>
                   <span className="block truncate text-xs text-mist">
                     {u.edad ? `${u.edad} años` : "Edad no registrada"}
-                    {u.posicion ? ` · ${u.posicion}` : ""} · {nombreEquipo(asistencias[u.id_usuario]?.id_equipo)}
+                    {u.posicion ? ` · ${u.posicion}` : ""} · {nombreEquipo(asis?.id_equipo)}
                   </span>
                 </span>
               </button>
@@ -470,7 +666,11 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
                   }
                   title="Asistencia"
                   className={`flex h-11 w-11 items-center justify-center rounded-full border-2 transition ${
-                    presente ? "border-floodlight bg-floodlight text-pitch-950" : "border-pitch-700 bg-transparent text-mist"
+                    presente
+                      ? esSuplente
+                        ? "border-floodlight/50 bg-floodlight/40 text-pitch-950"
+                        : "border-floodlight bg-floodlight text-pitch-950"
+                      : "border-pitch-700 bg-transparent text-mist"
                   } disabled:opacity-60`}
                   aria-label={presente ? "Marcar ausente" : "Marcar presente"}
                 >
@@ -478,16 +678,16 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
                 </button>
                 <button
                   disabled={jornadaBloqueada || (!puedeMarcarAOtros && sesion.id_usuario !== u.id_usuario)}
-                  onClick={() => marcarTicket(u.id_usuario, !asistencias[u.id_usuario]?.ticket_adicional)}
+                  onClick={() => marcarTicket(u.id_usuario, !asis?.ticket_adicional)}
                   title="Ticket"
                   className={`flex h-11 w-11 items-center justify-center rounded-full border-2 transition ${
-                    asistencias[u.id_usuario]?.ticket_adicional
+                    asis?.ticket_adicional
                       ? "border-turf-400 bg-turf-500 text-pitch-950"
                       : "border-pitch-700 bg-transparent text-mist"
                   } disabled:opacity-60`}
                   aria-label="Ticket adicional"
                 >
-                  {asistencias[u.id_usuario]?.ticket_adicional ? "✓" : ""}
+                  {asis?.ticket_adicional ? "✓" : ""}
                 </button>
               </div>
             </li>
@@ -518,6 +718,23 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
                 }}
                 onError={(msg) => mostrarToast(msg)}
               />
+            )}
+
+            {esAdmin && !jornadaBloqueada && (
+              <label className="mb-4 flex cursor-pointer items-center justify-between rounded border border-turf-500/40 bg-turf-500/10 px-3 py-2.5">
+                <div>
+                  <span className="block text-sm font-bold text-turf-400">Invitado (solo por esta jornada)</span>
+                  <span className="block text-xs text-mist">
+                    Si llega después de los 30, entra como titular en vez de suplente.
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={Boolean(asistencias[jugadorSeleccionado.id_usuario]?.es_invitado)}
+                  onChange={(e) => toggleInvitado(jugadorSeleccionado.id_usuario, e.target.checked)}
+                  className="h-5 w-5 accent-turf-500"
+                />
+              </label>
             )}
 
             {esAdmin && (
@@ -660,11 +877,25 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
                     className="rounded border border-pitch-700 bg-pitch-950 px-3 py-2.5 text-base text-chalk"
                   />
                 </label>
+                <label className="flex cursor-pointer items-center justify-between rounded border border-turf-500/40 bg-turf-500/10 px-3 py-2.5">
+                  <div>
+                    <span className="block text-sm font-bold text-turf-400">Es invitado (solo esta jornada)</span>
+                    <span className="block text-xs text-mist">
+                      Se salta la regla de suplente si llega después de los 30 titulares.
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={nuevoInvitado}
+                    onChange={(e) => setNuevoInvitado(e.target.checked)}
+                    className="h-5 w-5 accent-turf-500"
+                  />
+                </label>
                 {nuevaEdad && Number(nuevaEdad) > 0 && Number(nuevaEdad) < 12 && (
                   <label className="flex cursor-pointer items-center justify-between rounded border border-floodlight/40 bg-floodlight/10 px-3 py-2.5">
                     <div>
                       <span className="block text-sm font-bold text-floodlight">Camote (menor de 12)</span>
-                      <span className="block text-xs text-mist">No ocupa cupo en el draft ni paga cancha.</span>
+                      <span className="block text-xs text-mist">No ocupa cupo titular en el draft; entra por sorteo al final.</span>
                     </div>
                     <input
                       type="checkbox"
@@ -764,10 +995,10 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="font-display text-xl font-bold">Elegir capitanes</h2>
-            <p className="mb-4 text-sm text-mist">Toca a los jugadores presentes que serán capitanes de equipo.</p>
+            <p className="mb-4 text-sm text-mist">Toca a los jugadores titulares presentes que serán capitanes.</p>
             <ul className="mb-4 flex max-h-64 flex-col gap-1 overflow-y-auto">
               {presentes
-                .filter((u) => !(u.es_camote && typeof u.edad === "number" && u.edad < 12))
+                .filter((u) => clasificacion.titulares.has(u.id_usuario))
                 .map((u) => {
                   const marcado = capitanesElegidos.includes(u.id_usuario);
                   return (
@@ -798,6 +1029,86 @@ export function JugadoresClient({ sesion }: { sesion: SesionUsuario }) {
             >
               Confirmar equipos
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Pop-up automático al llegar a 35 jugadores (5 suplentes) */}
+      {popup35Abierto && (
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-pitch-950/80 p-6 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-floodlight bg-pitch-900 p-6 text-center">
+            <p className="font-display text-xl font-bold text-floodlight">⚽ ¡35 jugadores presentes!</p>
+            <p className="mb-6 mt-2 text-sm text-mist">
+              Ya tienes 30 titulares y 5 suplentes. ¿Deseas pasar a crear el 6to equipo ahora mismo con estos 5 suplentes o esperar al jugador 36?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setPopup35Abierto(false);
+                  setAviso35Descartado(true);
+                }}
+                className="flex-1 rounded-pill border border-pitch-700 py-3 text-sm"
+              >
+                Esperar al 36
+              </button>
+              <button
+                onClick={() => {
+                  setPopup35Abierto(false);
+                  setModalSextoEquipo(true);
+                }}
+                className="flex-1 rounded-pill bg-floodlight py-3 text-sm font-bold text-pitch-950"
+              >
+                Crear 6to equipo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para elegir al capitán del 6to equipo entre los suplentes */}
+      {modalSextoEquipo && (
+        <div className="fixed inset-0 z-20 flex items-end justify-center bg-pitch-950/80 backdrop-blur-sm" onClick={() => setModalSextoEquipo(false)}>
+          <div
+            className="w-full max-w-md rounded-t-2xl border-t border-floodlight bg-pitch-900 p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="font-display text-xl font-bold text-floodlight">6to Equipo (Suplentes)</h2>
+            <p className="mb-4 text-sm text-mist">
+              Elige quién será el capitán entre los {suplentesSinEquipo.length} suplentes para armar el equipo #6:
+            </p>
+            <ul className="mb-4 flex max-h-64 flex-col gap-1.5 overflow-y-auto">
+              {suplentesSinEquipo.map((u) => {
+                const elegido = capitanSextoElegido === u.id_usuario;
+                return (
+                  <li key={u.id_usuario}>
+                    <button
+                      onClick={() => setCapitanSextoElegido(u.id_usuario)}
+                      className={`flex w-full items-center justify-between rounded px-3 py-3 text-sm font-medium ${
+                        elegido ? "bg-floodlight text-pitch-950 font-bold" : "bg-pitch-800 text-chalk"
+                      }`}
+                    >
+                      <span>{u.nombre}</span>
+                      {elegido && <span>★ Capitán</span>}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setModalSextoEquipo(false)}
+                className="flex-1 rounded-pill border border-pitch-700 py-3 text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={crearSextoEquipo}
+                disabled={!capitanSextoElegido || creandoSexto}
+                className="flex-1 rounded-pill bg-floodlight py-3 font-display font-bold text-pitch-950 disabled:opacity-40"
+              >
+                Confirmar 6to equipo
+              </button>
+            </div>
           </div>
         </div>
       )}
